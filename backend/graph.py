@@ -49,28 +49,28 @@ def create_agent_graph():
 
 async def run_meteorologist(state: Dict[str, Any]) -> Dict[str, Any]:
     """Run meteorologist agent and update state"""
-    agent_state = AgentState(**state)
+    agent_state = state if isinstance(state, AgentState) else AgentState(**state)
     updates = await meteorologist.analyze(agent_state)
     return updates
 
 
 async def run_agronomist(state: Dict[str, Any]) -> Dict[str, Any]:
     """Run agronomist agent and update state"""
-    agent_state = AgentState(**state)
+    agent_state = state if isinstance(state, AgentState) else AgentState(**state)
     updates = await agronomist.analyze(agent_state)
     return updates
 
 
 async def run_economist(state: Dict[str, Any]) -> Dict[str, Any]:
     """Run economist agent and update state"""
-    agent_state = AgentState(**state)
+    agent_state = state if isinstance(state, AgentState) else AgentState(**state)
     updates = await economist.analyze(agent_state)
     return updates
 
 
 async def run_planner(state: Dict[str, Any]) -> Dict[str, Any]:
     """Run planner agent and update state"""
-    agent_state = AgentState(**state)
+    agent_state = state if isinstance(state, AgentState) else AgentState(**state)
     updates = await planner.analyze(agent_state)
     return updates
 

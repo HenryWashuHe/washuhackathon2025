@@ -2,16 +2,21 @@
 FastAPI Server for SCDS
 Handles analysis requests and streams agent outputs
 """
+import asyncio
+import json
+from pathlib import Path
+from typing import AsyncGenerator
+
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-import json
-import asyncio
-from typing import AsyncGenerator
 
 from models.schemas import AnalyzeRequest, AgentState
 from graph import agent_graph
 
+# Load backend/.env before importing components that need API keys
+load_dotenv(Path(__file__).parent / ".env")
 app = FastAPI(title="SCDS Agent API", version="1.0.0")
 
 # CORS - Allow Next.js frontend to connect
