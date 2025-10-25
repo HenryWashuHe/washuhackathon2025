@@ -21,6 +21,8 @@ export function DebateFeed({ messages, isAnalyzing }: DebateFeedProps) {
 
   const getRoleIcon = (role: string) => {
     switch (role) {
+      case "system":
+        return <CloudIcon className="h-4 w-4 text-blue-500" />
       case "meteorologist":
         return <CloudIcon className="h-4 w-4 text-chart-1" />
       case "agronomist":

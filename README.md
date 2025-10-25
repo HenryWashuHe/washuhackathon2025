@@ -1,10 +1,51 @@
-# washuhackathon2025
+# SCDS - Smart Climate Decision System
 
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+An AI-powered multi-agent platform that analyzes climate data and provides actionable climate adaptation strategies using real-time weather data and AI agents.
 
-## Getting Started
+## Features
 
-First, run the development server:
+- 🗺️ **Interactive Map**: Select any location worldwide with Mapbox integration
+- 🌦️ **Real Climate Data**: Fetches actual weather patterns from Open-Meteo API
+- 🤖 **AI Agent Debate**: Four specialized agents (Meteorologist, Agronomist, Economist, Planner) analyze and discuss climate impacts
+- 📊 **Data Visualization**: Charts showing rainfall trends and crop yield projections
+- 🎯 **Priority-Based Analysis**: Adjust economic, environmental, and social priorities
+- ⚡ **Real-Time Streaming**: Live debate updates via Server-Sent Events
+
+## Quick Start
+
+### Prerequisites
+
+- Node.js 18+ and npm
+- Mapbox API token ([Get one here](https://account.mapbox.com/access-tokens/))
+- OpenAI API key ([Get one here](https://platform.openai.com/api-keys))
+
+### Installation
+
+1. **Clone and install dependencies:**
+
+```bash
+npm install --legacy-peer-deps
+```
+
+2. **Set up environment variables:**
+
+```bash
+cp env.example .env.local
+```
+
+Edit `.env.local` and add your API keys:
+```env
+NEXT_PUBLIC_MAPBOX_TOKEN=your_mapbox_token_here
+OPENAI_API_KEY=your_openai_api_key_here
+```
+
+3. **Test the API integration:**
+
+```bash
+node test-climate-api.mjs
+```
+
+4. **Run the development server:**
 
 ```bash
 npm run dev
@@ -16,23 +57,118 @@ pnpm dev
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+5. **Open your browser:**
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Visit [http://localhost:3000](http://localhost:3000)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Usage
 
-## Learn More
+1. **Select a Location:**
+   - Search for a place (e.g., "Kenya", "California")
+   - Or enter coordinates manually
+   - Or click directly on the map
 
-To learn more about Next.js, take a look at the following resources:
+2. **Adjust Parameters:**
+   - Set the area of interest radius (10-200 km)
+   - Configure priority sliders (Economic, Environmental, Social)
+   - Optionally add context in the text area
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+3. **Run Analysis:**
+   - Click "Analyze Climate Impact"
+   - Watch the AI agents debate in real-time
+   - Review KPIs, charts, and recommendations
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+4. **Explore Results:**
+   - Click "Explain" to see data sources and reasoning
+   - Click "Recalculate" to re-run with different priorities
 
-## Deploy on Vercel
+## Project Structure
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```
+src/
+├── app/
+│   ├── api/analyze/route.ts    # Main analysis API endpoint
+│   ├── page.tsx                # Home page
+│   └── layout.tsx              # App layout
+├── components/
+│   ├── climate-map.tsx         # Interactive map component
+│   ├── debate-feed.tsx         # AI agent debate stream
+│   ├── kpi-cards.tsx           # Key performance indicators
+│   ├── climate-charts.tsx      # Data visualizations
+│   └── [other components]
+├── lib/
+│   ├── open-meteo.ts           # Climate data API integration
+│   └── mapbox.ts               # Geocoding functions
+└── types/
+    └── api.ts                  # TypeScript interfaces
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Tech Stack
+
+- **Frontend:** Next.js 15, React 19, TypeScript, TailwindCSS
+- **Map:** Mapbox GL JS
+- **Charts:** Chart.js + react-chartjs-2
+- **AI:** OpenAI GPT-4o-mini via Vercel AI SDK
+- **Data:** Open-Meteo API (weather), FAOSTAT (planned)
+- **UI Components:** Radix UI, shadcn/ui, Framer Motion
+
+## API Reference
+
+### POST `/api/analyze`
+
+Analyzes climate impact for a given location with AI agent debate.
+
+**Request Body:**
+```json
+{
+  "location": { "lat": -1.286, "lng": 36.817, "name": "Nairobi" },
+  "radius": 100,
+  "priorities": { "economic": 50, "environmental": 50, "social": 50 },
+  "userPrompt": "Focus on smallholder farmers"
+}
+```
+
+**Response:** Server-Sent Events stream with agent messages
+
+## Development
+
+**Run tests:**
+```bash
+node test-climate-api.mjs
+```
+
+**Build for production:**
+```bash
+npm run build
+npm run start
+```
+
+**Lint code:**
+```bash
+npm run lint
+```
+
+## Roadmap
+
+See [PROGRESS.md](./PROGRESS.md) for detailed development status and [PRD.md](./PRD.md) for the full product requirements.
+
+- [x] Frontend UI with map and controls
+- [x] Real-time AI agent streaming
+- [x] Open-Meteo climate data integration
+- [ ] FAOSTAT crop yield data integration
+- [ ] FastAPI backend with LangGraph agents
+- [ ] OR-Tools optimization engine
+- [ ] Multi-region comparison
+- [ ] Historical data caching
+
+## Contributing
+
+This is a hackathon project. See [TEST_PLAN.md](./TEST_PLAN.md) for testing guidelines.
+
+## License
+
+MIT
+
+---
+
+Built for WashU Hackathon 2025 🚀
