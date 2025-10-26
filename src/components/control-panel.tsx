@@ -6,10 +6,8 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { SearchIcon, MapPinIcon, SparklesIcon, RotateCcwIcon, InfoIcon } from "@/components/icons"
 import { useState } from "react"
-import { PrioritySliders } from "@/components/priority-sliders"
-import { AnalysisResults } from "@/components/analysis-results"
+import { AnalysisResults, type AnalysisOutcome } from "@/components/analysis-results"
 import { geocodeLocation } from "@/lib/mapbox"
-import type { Recommendation } from "@/types/api"
 import { ExplainModal } from "@/components/explain-modal"
 
 interface ControlPanelProps {
@@ -22,17 +20,13 @@ interface ControlPanelProps {
 export function ControlPanel({ location, radius, onLocationChange, onRadiusChange }: ControlPanelProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [isSearching, setIsSearching] = useState(false)
-  const [priorities, setPriorities] = useState({
-    economic: 50,
-    environmental: 50,
-    social: 50,
-  })
+  const [yearsInFuture, setYearsInFuture] = useState(10)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [showResults, setShowResults] = useState(false)
   const [hasAnalyzed, setHasAnalyzed] = useState(false)
   const [latInput, setLatInput] = useState("")
   const [lngInput, setLngInput] = useState("")
-  const [recommendation, setRecommendation] = useState<Recommendation | null>(null)
+  const [recommendation, setRecommendation] = useState<AnalysisOutcome | null>(null)
   const [showExplain, setShowExplain] = useState(false)
 
   const handleSearch = async () => {
@@ -76,7 +70,7 @@ export function ControlPanel({ location, radius, onLocationChange, onRadiusChang
     setIsAnalyzing(true)
   }
 
-  const handleAnalysisComplete = (rec: Recommendation | null) => {
+  const handleAnalysisComplete = (rec: AnalysisOutcome | null) => {
     setIsAnalyzing(false)
     if (rec) {
       setRecommendation(rec)
@@ -88,12 +82,15 @@ export function ControlPanel({ location, radius, onLocationChange, onRadiusChang
       <div className="flex flex-col h-full bg-card">
         {/* Header */}
         <div className="p-6 border-b border-border">
-          <h1 className="text-2xl font-bold text-foreground mb-2">Smart Climate Decision System</h1>
-          <p className="text-sm text-muted-foreground">Select a location and analyze climate impacts</p>
+          <h1 className="text-2xl font-bold text-foreground mb-2">Climate Livability Assessment</h1>
+          <p className="text-sm text-muted-foreground">
+            Evaluate long-term climate risks for residential planning
+          </p>
         </div>
 
         {/* Content */}
         <div className="flex-1 p-6 space-y-6 overflow-y-auto">
+          {/* Location search */}
           <Card className="p-4 bg-muted/30">
             <Label htmlFor="search" className="text-sm font-medium mb-2 block">
               Search Location
@@ -120,6 +117,7 @@ export function ControlPanel({ location, radius, onLocationChange, onRadiusChang
             </p>
           </Card>
 
+          {/* Coordinate input */}
           <Card className="p-4 bg-muted/30">
             <Label className="text-sm font-medium mb-2 block">Or Enter Coordinates</Label>
             <div className="grid grid-cols-2 gap-2">
@@ -130,7 +128,7 @@ export function ControlPanel({ location, radius, onLocationChange, onRadiusChang
                 <Input
                   id="lat"
                   type="number"
-                  placeholder="-1.286"
+                  placeholder="38.6270"
                   step="0.0001"
                   value={latInput}
                   onChange={(e) => setLatInput(e.target.value)}
@@ -144,7 +142,7 @@ export function ControlPanel({ location, radius, onLocationChange, onRadiusChang
                 <Input
                   id="lng"
                   type="number"
-                  placeholder="36.817"
+                  placeholder="-90.1994"
                   step="0.0001"
                   value={lngInput}
                   onChange={(e) => setLngInput(e.target.value)}
@@ -154,7 +152,7 @@ export function ControlPanel({ location, radius, onLocationChange, onRadiusChang
             </div>
           </Card>
 
-          {/* Current Location */}
+          {/* Selected Location */}
           {location && (
             <Card className="p-4 bg-blue-500/10 border-blue-500/20">
               <Label className="text-sm font-medium mb-2 block">Selected Location</Label>
@@ -165,10 +163,10 @@ export function ControlPanel({ location, radius, onLocationChange, onRadiusChang
             </Card>
           )}
 
-          {/* Radius Control */}
+          {/* Radius slider */}
           <Card className="p-4 bg-muted/30">
             <Label htmlFor="radius" className="text-sm font-medium mb-2 block">
-              Area of Interest: {radius} km
+              Analysis Radius: {radius} km
             </Label>
             <Input
               id="radius"
@@ -186,13 +184,37 @@ export function ControlPanel({ location, radius, onLocationChange, onRadiusChang
             </div>
           </Card>
 
-          <PrioritySliders priorities={priorities} onChange={setPriorities} />
+          {/* Years in the Future slider */}
+          <Card className="p-4 bg-gradient-to-br from-purple-500/10 to-blue-500/10 border-purple-500/20">
+            <Label htmlFor="years" className="text-sm font-medium mb-2 block">
+              Time Horizon: {yearsInFuture} {yearsInFuture === 1 ? 'year' : 'years'}
+            </Label>
+            <Input
+              id="years"
+              type="range"
+              min="1"
+              max="100"
+              step="1"
+              value={yearsInFuture}
+              onChange={(e) => setYearsInFuture(Number(e.target.value))}
+              className="w-full"
+            />
+            <div className="flex justify-between text-xs text-muted-foreground mt-1">
+              <span>1 year</span>
+              <span>50 years</span>
+              <span>100 years</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Assess climate livability over your planning horizon
+            </p>
+          </Card>
 
+          {/* Analyze button */}
           <div className="space-y-2">
             {!hasAnalyzed && location && (
               <Button onClick={handleAnalyze} disabled={isAnalyzing} className="w-full" size="lg">
                 <SparklesIcon className="h-4 w-4 mr-2" />
-                {isAnalyzing ? "Analyzing..." : "Analyze Climate Impact"}
+                {isAnalyzing ? "Analyzing..." : "Analyze Climate Risk"}
               </Button>
             )}
 
@@ -211,12 +233,13 @@ export function ControlPanel({ location, radius, onLocationChange, onRadiusChang
             )}
           </div>
 
+          {/* Analysis results */}
           {showResults && location && (
             <AnalysisResults
               location={location}
               radius={radius}
-              priorities={priorities}
               isAnalyzing={isAnalyzing}
+              yearsInFuture={yearsInFuture}
               onAnalysisComplete={handleAnalysisComplete}
             />
           )}

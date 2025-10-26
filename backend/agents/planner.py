@@ -1,12 +1,13 @@
 """
-PLANNER AGENT - TEAMMATE 4
-Synthesizes all agent outputs into actionable strategies
-
-TODO: Implement the analyze() method
+PLANNER AGENT - CLIMATE LIVABILITY ASSESSOR
+Evaluates long-term climate risks and livability for a location.
+Synthesizes outputs from Meteorologist and Economist agents.
 """
+
 from typing import Dict, List
 from agents.base import BaseAgent
 from models.schemas import AgentState, AgentClaim
+import math
 
 
 class PlannerAgent(BaseAgent):
@@ -15,212 +16,386 @@ class PlannerAgent(BaseAgent):
     
     async def analyze(self, state: AgentState) -> Dict:
         """
-        TODO: Implement planner synthesis
-        
-        Steps:
-        1. Collect outputs from all previous agents
-        2. Extract key metrics and recommendations
-        3. Apply user priority weights
-        4. Generate optimized strategy (crop mix, irrigation, etc.)
-        5. Calculate expected impacts (food, income, emissions, risk)
-        6. Create final recommendations
-        7. Generate natural language message
-        8. Return updated state with strategy
-        
-        Returns:
-            Dict with keys: 'planner_output', 'strategy', 'impact'
+        Assesses climate risks and livability for a location over a specified time horizon.
+        Returns environmental hazards, economic impact, and overall risk scores (0-100).
         """
-        
-        # TODO 1: Verify all agents have run
-        if not all([
-            state.meteorologist_output,
-            state.agronomist_output,
-            state.economist_output
-        ]):
-            raise ValueError("All previous agents must complete before Planner")
-        
-        # TODO 2: Extract key metrics from other agents
-        metrics = self._extract_metrics(state)
-        
-        # TODO 3: Generate optimized strategy
-        strategy = self._generate_strategy(
-            metrics,
-            state.priorities,
-            state.climate_data.extreme_weather_risk
-        )
-        
-        # TODO 4: Calculate impact of strategy
-        impact = self._calculate_impact(strategy, metrics)
-        
-        # TODO 5: Create claims
+
+        # Ensure required agents have run
+        if not state.meteorologist_output or not state.economist_output:
+            raise ValueError("Meteorologist and Economist agents must complete before Planner")
+
+        years = getattr(state, "years_in_future", 5)
+
+        # Extract insights from other agents
+        meteorologist_data = self._extract_meteorologist_insights(state)
+        economist_data = self._extract_economist_insights(state)
+
+        # Identify environmental hazards
+        hazards = self._identify_hazards(state, years, meteorologist_data)
+
+        # Calculate risk scores (0-100)
+        risk_scores = self._calculate_risk_scores(state, years, hazards, meteorologist_data)
+
+        # Estimate economic losses using economist data
+        economic_impact = self._estimate_economic_losses(state, years, hazards, economist_data)
+
+        # Generate recommendations
+        recommendations = self._generate_recommendations(state, years, hazards, risk_scores)
+
+        # Create claims for transparency
         claims = [
             AgentClaim(
-                metric="strategy_score",
-                value=self._score_strategy(strategy, state.priorities),
-                unit="0-100",
+                metric="overall_risk", 
+                value=risk_scores["overall"], 
+                unit="0-100", 
                 confidence=0.85
             ),
-            # TODO: Add climate_resilience claim
-            # TODO: Add food_security_improvement claim
+            AgentClaim(
+                metric="environmental_risk", 
+                value=risk_scores["environmental"], 
+                unit="0-100", 
+                confidence=0.88
+            ),
+            AgentClaim(
+                metric="economic_risk", 
+                value=risk_scores["economic"], 
+                unit="0-100", 
+                confidence=0.82
+            ),
+            AgentClaim(
+                metric="estimated_annual_losses", 
+                value=economic_impact["annual_loss_per_capita"], 
+                unit="USD", 
+                confidence=0.75
+            )
         ]
-        
-        # TODO 6: Compile recommendations from all agents
-        all_recommendations = self._compile_recommendations(state)
-        
-        # TODO 7: Generate synthesis message (2-3 sentences)
-        message = f"TODO: Synthesize strategy for {state.location.name} balancing priorities: Economic {state.priorities.economic}%, Environmental {state.priorities.environmental}%, Social {state.priorities.social}%"
-        
-        # Create agent message
-        agent_message = self.create_message(message, claims, all_recommendations)
-        
-        # Return updated state
+
+        # Create human-readable summary
+        risk_level = self._get_risk_level(risk_scores["overall"])
+        message = (
+            f"Livability assessment for {state.location.name} in {years} years:\n\n"
+            f"Overall Risk: {risk_scores['overall']:.1f}/100 ({risk_level})\n"
+            f"Environmental Risk: {risk_scores['environmental']:.1f}/100\n"
+            f"Economic Risk: {risk_scores['economic']:.1f}/100\n\n"
+            f"Primary Environmental Hazards: {', '.join(hazards[:3])}\n"
+            f"Estimated annual economic losses: ${economic_impact['annual_loss_per_capita']:,.0f} per capita\n\n"
+            f"Based on analysis from Meteorologist and Economist agents."
+        )
+
+        agent_message = self.create_message(message, claims, recommendations)
+
         return {
             "planner_output": agent_message,
-            "strategy": strategy,
-            "impact": impact
+            "risk_scores": risk_scores,
+            "hazards": hazards,
+            "economic_impact": economic_impact
         }
-    
-    def _extract_metrics(self, state: AgentState) -> Dict:
-        """
-        TODO: Extract key metrics from all agent outputs
+
+    # --------------------------- INTERNAL METHODS ----------------------------
+
+    def _extract_meteorologist_insights(self, state: AgentState) -> Dict:
+        """Extract relevant climate insights from meteorologist agent output."""
+        met_output = state.meteorologist_output
         
-        Extract:
-        - Precipitation anomaly (from meteorologist)
-        - Yield change (from agronomist)
-        - Income change (from economist)
-        - Water stress (from agronomist)
-        - Adaptation cost (from economist)
-        
-        Returns:
-            Dict of extracted metrics
-        """
-        metrics = {}
-        
-        # TODO: Extract from each agent's claims
-        # Hint: Loop through claims in state.agronomist_output.claims
-        # Look for specific metric names and store values
-        
-        return metrics
-    
-    def _generate_strategy(self, metrics: Dict, priorities: Dict, risk: str) -> Dict:
-        """
-        TODO: Generate optimized adaptation strategy
-        
-        Strategy should include:
-        - crop_mix: Dict[str, float] - e.g., {"maize": 0.5, "sorghum": 0.3, "beans": 0.2}
-        - irrigation: bool - Whether to implement irrigation
-        - water_harvesting: bool - Whether to add water systems
-        - soil_improvements: bool - Fertilizer, cover crops, etc.
-        - adaptation_timeline: str - "immediate", "short-term", "long-term"
-        
-        Consider:
-        - User priorities (economic vs environmental vs social)
-        - Climate risk level
-        - Yield impacts
-        - Budget constraints
-        
-        Args:
-            metrics: Extracted metrics from other agents
-            priorities: User priority weights
-            risk: Extreme weather risk level
-            
-        Returns:
-            Dict: Strategy configuration
-        """
-        strategy = {
-            "crop_mix": {},
-            "irrigation": False,
-            "water_harvesting": False,
-            "soil_improvements": False,
-            "adaptation_timeline": "short-term"
+        insights = {
+            "precipitation_trend": 0,
+            "temperature_anomaly": 0,
+            "extreme_weather_likelihood": "medium"
         }
         
-        # TODO: Implement strategy logic
-        # Example logic:
-        # if risk == "high" and priorities.economic > 50:
-        #     strategy["crop_mix"] = {"maize": 0.4, "sorghum": 0.4, "beans": 0.2}
-        #     strategy["irrigation"] = True
-        # elif priorities.environmental > 60:
-        #     strategy["crop_mix"] = {"sorghum": 0.5, "beans": 0.3, "millet": 0.2}
-        #     strategy["soil_improvements"] = True
+        # Extract from claims if available
+        if hasattr(met_output, 'claims'):
+            for claim in met_output.claims:
+                if claim.metric == "precipitation_anomaly":
+                    insights["precipitation_trend"] = claim.value
+                elif claim.metric == "temperature_anomaly":
+                    insights["temperature_anomaly"] = claim.value
         
-        return strategy
-    
-    def _calculate_impact(self, strategy: Dict, metrics: Dict) -> Dict:
-        """
-        TODO: Calculate expected impact of strategy
+        return insights
+
+    def _extract_economist_insights(self, state: AgentState) -> Dict:
+        """Extract economic data from economist agent output."""
+        econ_output = state.economist_output
         
-        Calculate changes in:
-        - food_security: 0-1 scale improvement
-        - income: Percentage change from baseline
-        - emissions: Percentage change (negative = reduction)
-        - risk: Percentage reduction in climate risk
-        
-        Args:
-            strategy: Generated strategy dict
-            metrics: Current metrics
-            
-        Returns:
-            Dict: Impact metrics
-        """
-        impact = {
-            "food": 0.0,
-            "income": 0.0,
-            "emissions": 0.0,
-            "risk": 0.0
+        insights = {
+            "income_change": 0,
+            "adaptation_cost": 0,
+            "economic_vulnerability": 50  # Default medium vulnerability
         }
         
-        # TODO: Implement impact calculations
-        # Example:
-        # if strategy["irrigation"]:
-        #     impact["food"] += 0.15  # 15% improvement
-        #     impact["income"] += 0.10
-        #     impact["emissions"] += 0.05  # 5% increase in emissions
-        # 
-        # if "sorghum" in strategy["crop_mix"] and strategy["crop_mix"]["sorghum"] > 0.3:
-        #     impact["risk"] -= 0.20  # 20% risk reduction
+        # Extract from claims if available
+        if hasattr(econ_output, 'claims'):
+            for claim in econ_output.claims:
+                if claim.metric == "income_change":
+                    insights["income_change"] = claim.value
+                elif claim.metric == "adaptation_cost":
+                    insights["adaptation_cost"] = claim.value
+                elif claim.metric == "economic_impact":
+                    insights["economic_vulnerability"] = abs(claim.value)
         
-        return impact
-    
-    def _score_strategy(self, strategy: Dict, priorities: Dict) -> float:
+        return insights
+
+    def _identify_hazards(self, state: AgentState, years: int, met_data: Dict) -> List[str]:
         """
-        TODO: Score strategy based on priorities (0-100)
-        
-        Weight the impact by user priorities and calculate overall score
-        
-        Args:
-            strategy: Generated strategy
-            priorities: User priority weights
-            
-        Returns:
-            float: Score 0-100
+        Identify likely environmental hazards based on location and climate data.
+        Returns list of hazards in order of severity.
         """
-        # TODO: Implement scoring
-        return 75.0
-    
-    def _compile_recommendations(self, state: AgentState) -> List[str]:
+        hazards = []
+        climate = state.climate_data
+        
+        # Use meteorologist's precipitation trend
+        precip_trend = met_data.get("precipitation_trend", 0)
+        temp_anomaly = met_data.get("temperature_anomaly", 0)
+        
+        # Temperature-based hazards (account for meteorologist's anomaly)
+        effective_temp = climate.temperature + (temp_anomaly * years / 10)
+        
+        if effective_temp > 28:
+            hazards.append("Extreme heat waves")
+            if years > 10:
+                hazards.append("Prolonged heat stress")
+        
+        if effective_temp > 32 and years > 15:
+            hazards.append("Dangerous heat conditions")
+        
+        # Precipitation-based hazards (account for meteorologist's trend)
+        effective_precip = climate.precipitation + (precip_trend * years / 5)
+        
+        if effective_precip < 400:
+            hazards.append("Severe drought")
+            hazards.append("Water scarcity")
+        elif effective_precip > 1500:
+            hazards.append("Flooding")
+            hazards.append("Storm damage")
+        
+        # Extreme weather risk
+        if climate.extreme_weather_risk in ["high", "extreme"]:
+            hazards.append("Hurricanes/tropical storms")
+            hazards.append("Tornado risk")
+            hazards.append("Severe thunderstorms")
+        
+        # Future projections based on years
+        if years > 15:
+            if effective_temp > 30:
+                hazards.append("Unlivable heat conditions")
+            if climate.extreme_weather_risk != "low":
+                hazards.append("Increased storm intensity")
+        
+        if years > 30:
+            # Long-term catastrophic risks
+            if effective_temp > 33:
+                hazards.append("Ecosystem collapse")
+            hazards.append("Infrastructure breakdown")
+            hazards.append("Mass displacement risk")
+        
+        # Coastal risks
+        lat, lng = state.location.lat, state.location.lng
+        is_coastal = self._is_likely_coastal(lat, lng)
+        if is_coastal and years > 10:
+            hazards.append("Sea level rise")
+            hazards.append("Coastal flooding")
+        
+        return hazards[:8]  # Return top 8 hazards
+
+    def _is_likely_coastal(self, lat: float, lng: float) -> bool:
         """
-        TODO: Compile top recommendations from all agents
-        
-        - Take recommendations from agronomist, economist
-        - Add strategic recommendations from planner
-        - Prioritize by impact and user priorities
-        - Limit to top 5-7 recommendations
-        
-        Returns:
-            List[str]: Compiled recommendations
+        Simple heuristic to identify coastal regions (Florida, Gulf Coast, etc.)
+        In production, you'd use elevation/distance-to-coast data.
         """
-        all_recs = []
+        # Florida
+        if 24 < lat < 31 and -88 < lng < -80:
+            return True
+        # Gulf Coast
+        if 29 < lat < 31 and -98 < lng < -88:
+            return True
+        # East Coast
+        if 32 < lat < 45 and -79 < lng < -70:
+            return True
+        # West Coast
+        if 32 < lat < 49 and -125 < lng < -117:
+            return True
+        return False
+
+    def _calculate_risk_scores(self, state: AgentState, years: int, 
+                               hazards: List[str], met_data: Dict) -> Dict:
+        """
+        Calculate objective risk scores (0-100) for environmental and economic factors.
+        Higher = more dangerous/costly.
+        """
+        climate = state.climate_data
         
-        # TODO: Gather from agronomist
-        if state.agronomist_output and state.agronomist_output.recommendations:
-            all_recs.extend(state.agronomist_output.recommendations)
+        # ENVIRONMENTAL RISK CALCULATION
+        env_risk = 0
         
-        # TODO: Add planner-specific recommendations
-        # Example: "Implement strategy in phases: immediate (water harvesting), short-term (irrigation), long-term (soil restoration)"
+        # Base temperature risk with meteorologist's anomaly
+        temp_anomaly = met_data.get("temperature_anomaly", 0)
+        effective_temp = climate.temperature + (temp_anomaly * years / 10)
+        temp_deviation = abs(effective_temp - 25)
+        env_risk += min(temp_deviation * 3, 35)  # Up to 35 points
         
-        return all_recs[:7]  # Limit to top 7
+        # Extreme weather multiplier
+        weather_risk_map = {"low": 0, "medium": 15, "high": 30, "extreme": 45}
+        env_risk += weather_risk_map.get(climate.extreme_weather_risk, 15)
+        
+        # Precipitation extremes with meteorologist's trend
+        precip_trend = met_data.get("precipitation_trend", 0)
+        effective_precip = climate.precipitation + (precip_trend * years / 5)
+        
+        if effective_precip < 400:  # Drought
+            env_risk += 20
+        elif effective_precip > 1800:  # Excessive rain
+            env_risk += 15
+        
+        # Hazard count penalty
+        env_risk += len(hazards) * 2
+        
+        # Time-based escalation
+        if years <= 10:
+            time_multiplier = 1 + (years * 0.03)  # 3% per year
+        elif years <= 30:
+            time_multiplier = 1.3 + ((years - 10) * 0.05)  # 5% per year after year 10
+        else:
+            time_multiplier = 2.3 + ((years - 30) * 0.08)  # 8% per year after year 30
+        
+        env_risk *= time_multiplier
+        
+        # Cap at 100
+        env_risk = min(env_risk, 100)
+        
+        # ECONOMIC RISK CALCULATION
+        # Start with environmental risk correlation
+        econ_risk = env_risk * 0.7
+        
+        # Severe hazards increase economic risk
+        severe_hazards = ["Hurricanes/tropical storms", "Flooding", "Unlivable heat conditions", 
+                         "Sea level rise", "Infrastructure breakdown"]
+        severe_count = sum(1 for h in hazards if h in severe_hazards)
+        econ_risk += severe_count * 8
+        
+        # Coastal penalty (higher property values at risk)
+        if self._is_likely_coastal(state.location.lat, state.location.lng):
+            econ_risk += 15
+        
+        # Long-term economic uncertainty
+        if years > 20:
+            econ_risk += (years - 20) * 0.5
+        
+        econ_risk = min(econ_risk, 100)
+        
+        # OVERALL RISK (weighted average)
+        overall_risk = (env_risk * 0.6) + (econ_risk * 0.4)
+        
+        return {
+            "environmental": round(env_risk, 1),
+            "economic": round(econ_risk, 1),
+            "overall": round(overall_risk, 1)
+        }
+
+    def _estimate_economic_losses(self, state: AgentState, years: int, 
+                                  hazards: List[str], econ_data: Dict) -> Dict:
+        """
+        Estimate annual economic losses per capita based on climate risks.
+        Uses economist agent's data for baseline costs.
+        """
+        # Start with economist's adaptation cost estimate
+        base_loss = max(econ_data.get("adaptation_cost", 500) * 100, 500)
+        
+        # Factor in income change from economist
+        income_impact = econ_data.get("income_change", 0)
+        if income_impact < 0:
+            base_loss += abs(income_impact) * 50  # Negative income change increases losses
+        
+        # Multiply by hazard severity
+        for hazard in hazards:
+            if "hurricane" in hazard.lower() or "storm" in hazard.lower():
+                base_loss += 2000
+            elif "flood" in hazard.lower():
+                base_loss += 1500
+            elif "heat" in hazard.lower() and ("extreme" in hazard.lower() or "dangerous" in hazard.lower()):
+                base_loss += 1200
+            elif "drought" in hazard.lower():
+                base_loss += 800
+            elif "sea level" in hazard.lower():
+                base_loss += 2500
+            elif "infrastructure" in hazard.lower():
+                base_loss += 1800
+            else:
+                base_loss += 300
+        
+        # Time multiplier
+        if years > 10:
+            base_loss *= (1 + (years - 10) * 0.05)
+        
+        # Temperature penalty (higher temps = higher cooling costs, health costs, etc.)
+        temp = state.climate_data.temperature
+        if temp > 30:
+            base_loss += (temp - 30) * 200
+        
+        # Economic vulnerability from economist agent
+        vulnerability_factor = econ_data.get("economic_vulnerability", 50) / 50
+        base_loss *= vulnerability_factor
+        
+        return {
+            "annual_loss_per_capita": round(base_loss),
+            "total_estimated_loss_10yr": round(base_loss * 10),
+            "economist_adaptation_cost": econ_data.get("adaptation_cost", 0),
+            "confidence": 0.75
+        }
+
+    def _generate_recommendations(self, state: AgentState, years: int, 
+                                 hazards: List[str], risk_scores: Dict) -> List[str]:
+        """
+        Generate actionable recommendations based on risk assessment.
+        """
+        recs = []
+        overall_risk = risk_scores["overall"]
+        
+        # Risk-level based advice
+        if overall_risk > 75:
+            recs.append("⚠️ HIGH RISK: Strongly consider alternative locations with lower climate risk")
+            recs.append("If staying, invest heavily in climate-resilient housing and infrastructure")
+        elif overall_risk > 50:
+            recs.append("⚠️ MODERATE-HIGH RISK: Prepare for significant climate adaptation needs")
+            recs.append("Budget for increased insurance and disaster preparedness")
+        elif overall_risk > 25:
+            recs.append("✓ MODERATE RISK: Standard climate precautions recommended")
+        else:
+            recs.append("✓ LOW RISK: Location shows relatively stable climate outlook")
+        
+        # Hazard-specific recommendations
+        if "heat" in str(hazards).lower():
+            recs.append("Install high-efficiency cooling systems and consider heat-resilient building materials")
+        
+        if "hurricane" in str(hazards).lower() or "storm" in str(hazards).lower():
+            recs.append("Ensure hurricane-rated construction and maintain comprehensive insurance")
+        
+        if "Drought" in hazards or "Water scarcity" in hazards:
+            recs.append("Invest in water conservation systems and alternative water sources")
+        
+        if "Flooding" in hazards or "Sea level rise" in hazards:
+            recs.append("Verify property elevation and flood zone status; consider relocation from high-risk zones")
+        
+        # Time-horizon specific advice
+        if years > 20:
+            recs.append("For long-term planning, consider generational climate migration patterns")
+        
+        if years > 30:
+            recs.append("At 30+ year horizons, climate uncertainty is high; maintain flexibility in plans")
+        
+        return recs[:7]
+
+    def _get_risk_level(self, score: float) -> str:
+        """Convert numeric risk to descriptive level."""
+        if score >= 80:
+            return "EXTREME RISK"
+        elif score >= 60:
+            return "HIGH RISK"
+        elif score >= 40:
+            return "MODERATE RISK"
+        elif score >= 20:
+            return "LOW-MODERATE RISK"
+        else:
+            return "LOW RISK"
 
 
-# Singleton instance
 planner = PlannerAgent()

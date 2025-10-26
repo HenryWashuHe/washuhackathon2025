@@ -9,10 +9,8 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { SearchIcon, MapPinIcon, SparklesIcon, RotateCcwIcon, InfoIcon } from "@/components/icons"
-import { PrioritySliders } from "@/components/priority-sliders"
-import { AnalysisResults } from "@/components/analysis-results"
+import { AnalysisResults, type AnalysisOutcome } from "@/components/analysis-results"
 import { geocodeLocation } from "@/lib/mapbox"
-import type { Recommendation } from "@/types/api"
 import { ExplainModal } from "@/components/explain-modal"
 
 export default function Home() {
@@ -20,18 +18,14 @@ export default function Home() {
   const [radius, setRadius] = useState(50)
   const [searchQuery, setSearchQuery] = useState("")
   const [isSearching, setIsSearching] = useState(false)
-  const [priorities, setPriorities] = useState({
-    economic: 50,
-    environmental: 50,
-    social: 50,
-  })
+  const [yearsInFuture, setYearsInFuture] = useState(10)
   const [userPrompt, setUserPrompt] = useState("")
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [showResults, setShowResults] = useState(false)
   const [hasAnalyzed, setHasAnalyzed] = useState(false)
   const [latInput, setLatInput] = useState("")
   const [lngInput, setLngInput] = useState("")
-  const [recommendation, setRecommendation] = useState<Recommendation | null>(null)
+  const [recommendation, setRecommendation] = useState<AnalysisOutcome | null>(null)
   const [showExplain, setShowExplain] = useState(false)
 
   const handleSearch = async () => {
@@ -75,7 +69,7 @@ export default function Home() {
     setIsAnalyzing(true)
   }
 
-  const handleAnalysisComplete = (rec: Recommendation | null) => {
+  const handleAnalysisComplete = (rec: AnalysisOutcome | null) => {
     setIsAnalyzing(false)
     if (rec) {
       setRecommendation(rec)
@@ -128,7 +122,7 @@ export default function Home() {
                   <Input
                     id="lat"
                     type="number"
-                    placeholder="-1.286"
+                    placeholder="38.6270"
                     step="0.0001"
                     value={latInput}
                     onChange={(e) => setLatInput(e.target.value)}
@@ -142,7 +136,7 @@ export default function Home() {
                   <Input
                     id="lng"
                     type="number"
-                    placeholder="36.817"
+                    placeholder="-90.1994"
                     step="0.0001"
                     value={lngInput}
                     onChange={(e) => setLngInput(e.target.value)}
@@ -178,7 +172,7 @@ export default function Home() {
             <div className="space-y-6">
               <div>
                 <Label htmlFor="radius" className="text-sm font-medium mb-2 block">
-                  Area of Interest: {radius} km
+                  Analysis Radius: {radius} km
                 </Label>
                 <Input
                   id="radius"
@@ -196,7 +190,30 @@ export default function Home() {
                 </div>
               </div>
 
-              <PrioritySliders priorities={priorities} onChange={setPriorities} />
+              {/* Years in the Future slider */}
+              <Card className="p-4 bg-gradient-to-br from-purple-500/10 to-blue-500/10 border-purple-500/20">
+                <Label htmlFor="years" className="text-sm font-medium mb-2 block">
+                  Time Horizon: {yearsInFuture} {yearsInFuture === 1 ? 'year' : 'years'}
+                </Label>
+                <Input
+                  id="years"
+                  type="range"
+                  min="1"
+                  max="100"
+                  step="1"
+                  value={yearsInFuture}
+                  onChange={(e) => setYearsInFuture(Number(e.target.value))}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                  <span>1 year</span>
+                  <span>50 years</span>
+                  <span>100 years</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Assess climate livability over your planning horizon
+                </p>
+              </Card>
 
               <div>
                 <Label htmlFor="userPrompt" className="text-sm font-medium mb-2 block">
@@ -204,7 +221,7 @@ export default function Home() {
                 </Label>
                 <Textarea
                   id="userPrompt"
-                  placeholder="Add specific questions or context for the AI agents to consider during analysis... (e.g., 'Focus on drought resilience' or 'Consider impact on smallholder farmers')"
+                  placeholder="Add specific questions or context for the AI agents to consider during analysis... (e.g., 'Focus on hurricane risk' or 'Consider coastal flooding')"
                   value={userPrompt}
                   onChange={(e) => setUserPrompt(e.target.value)}
                   className="min-h-[100px] resize-y"
@@ -218,7 +235,7 @@ export default function Home() {
                 {!hasAnalyzed && location && (
                   <Button onClick={handleAnalyze} disabled={isAnalyzing} className="w-full" size="lg">
                     <SparklesIcon className="h-4 w-4 mr-2" />
-                    {isAnalyzing ? "Analyzing..." : "Analyze Climate Impact"}
+                    {isAnalyzing ? "Analyzing..." : "Analyze Climate Risk"}
                   </Button>
                 )}
 
@@ -245,9 +262,9 @@ export default function Home() {
           <AnalysisResults
             location={location}
             radius={radius}
-            priorities={priorities}
             userPrompt={userPrompt}
             isAnalyzing={isAnalyzing}
+            yearsInFuture={yearsInFuture}
             onAnalysisComplete={handleAnalysisComplete}
           />
         )}

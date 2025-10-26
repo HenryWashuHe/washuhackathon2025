@@ -1,9 +1,8 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import type mapboxgl from "mapbox-gl"
-import type { MapMouseEvent } from "mapbox-gl"
 import "mapbox-gl/dist/mapbox-gl.css"
+import "maplibre-gl/dist/maplibre-gl.css"
 import { getMapboxToken } from "@/lib/mapbox"
 import { createCircleGeoJSON } from "@/lib/circle-geojson"
 import { MapPinIcon } from "@/components/icons"
@@ -21,75 +20,136 @@ const INITIAL_VIEW: { center: [number, number]; zoom: number } = {
 
 const FALLBACK_STYLE = "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json"
 
-type MapboxLib = typeof mapboxgl
+type LngLat = { lng: number; lat: number }
+type LngLatLike = [number, number] | LngLat
+
+type MapEvent = { lngLat: LngLat }
+
+interface MapInstance {
+  on: (event: string, handler: (event?: MapEvent) => void) => void
+  off: (event: string, handler: (event?: MapEvent) => void) => void
+  remove: () => void
+  flyTo: (options: { center: [number, number]; zoom?: number; duration?: number }) => void
+  addSource: (id: string, source: Record<string, unknown>) => void
+  addLayer: (layer: Record<string, unknown>) => void
+  getLayer: (id: string) => unknown
+  removeLayer: (id: string) => void
+  getSource: (id: string) => unknown
+  removeSource: (id: string) => void
+  setFog?: (fog: Record<string, unknown>) => void
+}
+
+interface MarkerInstance {
+  setLngLat: (lngLat: LngLatLike) => MarkerInstance
+  addTo: (map: MapInstance) => MarkerInstance
+  remove: () => void
+  on: (event: string, handler: () => void) => MarkerInstance
+  getLngLat: () => LngLat
+}
+
+type MapConstructor = new (options: Record<string, unknown>) => MapInstance
+type MarkerConstructor = new (options?: Record<string, unknown>) => MarkerInstance
+
+interface MapLibrary {
+  Map: MapConstructor
+  Marker: MarkerConstructor
+  accessToken?: string
+}
 
 export function ClimateMap({ location, radius, onLocationChange }: ClimateMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null)
-  const map = useRef<mapboxgl.Map | null>(null)
-  const marker = useRef<mapboxgl.Marker | null>(null)
+  const map = useRef<MapInstance | null>(null)
+  const marker = useRef<MarkerInstance | null>(null)
   const circle = useRef<{ source: string; fill: string; outline: string } | null>(null)
-  const mapboxLib = useRef<MapboxLib | null>(null)
-  const [mapboxReady, setMapboxReady] = useState(false)
-  const [token] = useState<string>(() => getMapboxToken())
+  const mapLib = useRef<MapLibrary | null>(null)
+  const [mapLibReady, setMapLibReady] = useState(false)
+  const [engine, setEngine] = useState<"mapbox" | "maplibre" | null>(null)
+  const [token] = useState<string | null>(() => getMapboxToken() || null)
   const [mapLoaded, setMapLoaded] = useState(false)
-  const [mapStatus, setMapStatus] = useState<"idle" | "loading" | "ready" | "error">(token ? "idle" : "error")
-  const [geoStatus, setGeoStatus] = useState<"idle" | "locating" | "error">("idle")
   const hasMapboxToken = Boolean(token)
+  const [mapStatus, setMapStatus] = useState<"idle" | "loading" | "ready" | "error">(hasMapboxToken ? "idle" : "loading")
+  const [geoStatus, setGeoStatus] = useState<"idle" | "locating" | "error">("idle")
 
   const mapStyle = useMemo(() => (hasMapboxToken ? "mapbox://styles/mapbox/dark-v11" : FALLBACK_STYLE), [hasMapboxToken])
 
   useEffect(() => {
     let isMounted = true
     const load = async () => {
-      const [{ default: mapbox }, { default: WorkerClass }] = await Promise.all([
-        import("mapbox-gl"),
-        import("mapbox-gl/dist/mapbox-gl-csp-worker"),
-      ])
+      try {
+        if (hasMapboxToken) {
+          const [{ default: mapbox }, { default: WorkerClass }] = await Promise.all([
+            import("mapbox-gl"),
+            import("mapbox-gl/dist/mapbox-gl-csp-worker"),
+          ])
 
-      if (!isMounted) return
-      if ((mapbox as unknown as { workerClass?: typeof Worker }).workerClass === undefined) {
-        ;(mapbox as unknown as { workerClass?: typeof Worker }).workerClass = WorkerClass as unknown as typeof Worker
+          if (!isMounted) return
+
+          if ((mapbox as unknown as { workerClass?: typeof Worker }).workerClass === undefined) {
+            ;(mapbox as unknown as { workerClass?: typeof Worker }).workerClass = WorkerClass as unknown as typeof Worker
+          }
+
+          mapLib.current = mapbox as unknown as MapLibrary
+          setEngine("mapbox")
+        } else {
+          const { default: maplibre } = await import("maplibre-gl")
+          if (!isMounted) return
+          mapLib.current = maplibre as unknown as MapLibrary
+          setEngine("maplibre")
+        }
+
+        setMapLibReady(true)
+        setMapStatus((status) => (status === "loading" ? "idle" : status))
+      } catch (error) {
+        console.error("[map] failed to load map library", error)
+        if (isMounted) {
+          setMapStatus("error")
+        }
       }
-
-      mapboxLib.current = mapbox
-      setMapboxReady(true)
     }
 
-    load().catch((error) => {
-      console.error("[map] failed to load Mapbox GL", error)
-      setMapStatus("error")
-    })
+    load()
 
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [hasMapboxToken])
 
   // Initialize map
   useEffect(() => {
-    if (!mapContainer.current || map.current || !token || !mapboxReady || !mapboxLib.current) {
+    if (!mapContainer.current || map.current || !mapLibReady || !mapLib.current) {
       return
     }
 
-    const mapbox = mapboxLib.current
-    mapbox.accessToken = token || "public-demo"
+    if (hasMapboxToken && !token) {
+      return
+    }
+
+    const lib = mapLib.current as MapLibrary
     const loadingFrame = requestAnimationFrame(() => setMapStatus("loading"))
 
-    map.current = new mapbox.Map({
+    if (engine === "mapbox" && token) {
+      lib.accessToken = token
+    }
+
+    const mapOptions: Record<string, unknown> = {
       container: mapContainer.current,
       style: mapStyle,
       center: INITIAL_VIEW.center,
       zoom: INITIAL_VIEW.zoom,
-      projection: hasMapboxToken ? "globe" : "mercator",
-    })
+    }
+
+    if (engine === "mapbox" && hasMapboxToken) {
+      mapOptions.projection = "globe"
+    }
+
+    map.current = new lib.Map(mapOptions)
 
     map.current.on("load", () => {
       setMapLoaded(true)
       setMapStatus("ready")
 
-      // Add atmosphere effect
-      if (map.current) {
-        map.current.setFog({
+      if (engine === "mapbox" && map.current) {
+        map.current.setFog?.({
           color: "rgb(10, 10, 15)",
           "high-color": "rgb(20, 20, 30)",
           "horizon-blend": 0.02,
@@ -99,8 +159,8 @@ export function ClimateMap({ location, radius, onLocationChange }: ClimateMapPro
       }
     })
 
-    // Click to set location
-    const handleClick = (e: MapMouseEvent) => {
+    const handleClick = (e?: MapEvent) => {
+      if (!e) return
       const { lng, lat } = e.lngLat
       onLocationChange({ lat, lng, name: `${lat.toFixed(4)}, ${lng.toFixed(4)}` })
     }
@@ -114,13 +174,13 @@ export function ClimateMap({ location, radius, onLocationChange }: ClimateMapPro
       map.current?.remove()
       map.current = null
       setMapLoaded(false)
-      setMapStatus("idle")
+      setMapStatus(hasMapboxToken ? "idle" : "loading")
     }
-  }, [token, mapStyle, hasMapboxToken, mapboxReady, onLocationChange])
+  }, [token, mapStyle, hasMapboxToken, mapLibReady, engine, onLocationChange])
 
   // Update marker and circle when location changes
   useEffect(() => {
-    if (!map.current || !mapLoaded || !location || !mapboxLib.current) return
+    if (!map.current || !mapLoaded || !location || !mapLib.current) return
 
     // Remove existing marker
     if (marker.current) {
@@ -131,10 +191,9 @@ export function ClimateMap({ location, radius, onLocationChange }: ClimateMapPro
     const el = document.createElement("div")
     el.className = "w-8 h-8 bg-blue-500 rounded-full border-4 border-white shadow-lg cursor-move"
 
-    const mapbox = mapboxLib.current
-    if (!mapbox) return
+    const lib = mapLib.current as MapLibrary
 
-    marker.current = new mapbox.Marker({
+    marker.current = new lib.Marker({
       element: el,
       draggable: true,
     })

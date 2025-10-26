@@ -1,8 +1,6 @@
 """
 METEOROLOGIST AGENT - TEAMMATE 1
-Analyzes climate data from Open-Meteo API using AI
-
-TODO: Implement the analyze() method
+Analyzes climate data and environmental hazards for livability assessment
 """
 from typing import Dict
 from agents.base import BaseAgent
@@ -11,6 +9,7 @@ import httpx
 import os
 from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
+from datetime import datetime, timedelta
 
 
 class MeteorologistAgent(BaseAgent):
@@ -25,43 +24,57 @@ class MeteorologistAgent(BaseAgent):
     
     async def analyze(self, state: AgentState) -> Dict:
         """
-        TODO: Implement meteorologist analysis
-        
-        Steps:
-        1. Fetch climate data from Open-Meteo API
-        2. Calculate metrics (temperature, precipitation, anomalies)
-        3. Assess extreme weather risk
-        4. Create claims with confidence scores
-        5. Generate natural language message
-        6. Return updated state
+        Analyzes climate conditions and environmental hazards for livability.
         
         Returns:
             Dict with keys: 'climate_data' and 'meteorologist_output'
         """
         
-        # TODO 1: Fetch climate data
+        years = getattr(state, "years_in_future", 5)
+        
+        # Fetch current climate data
         climate_data = await self._fetch_climate_data(
             state.location.lat,
             state.location.lng
         )
         
-        # TODO 2: Create claims
+        # Calculate future projections
+        projections = self._calculate_future_projections(climate_data, years)
+        
+        # Create claims
         claims = [
-            # Example claim - add more
             AgentClaim(
-                metric="temperature_avg",
-                value=climate_data.temperature_avg,
+                metric="temperature",
+                value=climate_data.temperature,
                 unit="°C",
                 confidence=0.95
             ),
-            # TODO: Add precipitation_anomaly claim
-            # TODO: Add extreme_weather_risk claim
+            AgentClaim(
+                metric="precipitation",
+                value=climate_data.precipitation,
+                unit="mm",
+                confidence=0.93
+            ),
+            AgentClaim(
+                metric="temperature_anomaly",
+                value=projections["temp_anomaly"],
+                unit="°C",
+                confidence=0.75
+            ),
+            AgentClaim(
+                metric="precipitation_anomaly",
+                value=projections["precip_anomaly"],
+                unit="mm",
+                confidence=0.72
+            )
         ]
         
-        # TODO 3: Generate AI-powered message (2-3 sentences)
+        # Generate AI-powered message
         message = await self._generate_ai_analysis(
             climate_data,
+            projections,
             state.location.name,
+            years,
             state.userPrompt
         )
         
@@ -74,39 +87,70 @@ class MeteorologistAgent(BaseAgent):
             "meteorologist_output": agent_message
         }
     
-    async def _generate_ai_analysis(self, climate_data: ClimateData, location_name: str, user_prompt: str = None) -> str:
+    def _calculate_future_projections(self, climate_data: ClimateData, years: int) -> Dict:
         """
-        Use AI to generate climate analysis based on real data
+        Project climate changes over the specified time horizon.
+        Uses simplified climate models - in production, use actual climate models.
+        """
+        # Temperature typically increases 0.2-0.3°C per decade
+        temp_increase_per_decade = 0.25
+        temp_anomaly = (years / 10) * temp_increase_per_decade
         
-        This makes the agent "intelligent" - it reasons about the data
+        # Precipitation changes vary by region and baseline
+        # Wet areas get wetter, dry areas get drier (simplified)
+        baseline_precip = climate_data.precipitation
+        if baseline_precip < 500:  # Dry region
+            precip_change_rate = -5  # mm per decade
+        elif baseline_precip > 1200:  # Wet region
+            precip_change_rate = 15  # mm per decade
+        else:  # Moderate
+            precip_change_rate = 2
+        
+        precip_anomaly = (years / 10) * precip_change_rate
+        
+        return {
+            "temp_anomaly": round(temp_anomaly, 2),
+            "precip_anomaly": round(precip_anomaly, 1)
+        }
+    
+    async def _generate_ai_analysis(self, climate_data: ClimateData, projections: Dict, 
+                                   location_name: str, years: int, user_prompt: str = None) -> str:
+        """
+        Use AI to generate climate analysis for livability assessment
         """
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an expert meteorologist analyzing climate data for agricultural planning.
+            ("system", """You are an expert meteorologist analyzing climate risks for residential planning.
 Provide concise, actionable analysis in 2-3 sentences.
-Focus on immediate risks and trends that farmers need to know."""),
-            ("user", """Analyze this climate data for {location}:
+Focus on environmental hazards and livability concerns."""),
+            ("user", """Analyze this climate data for {location} over the next {years} years:
 
-Temperature: {temp}°C (average over 90 days)
-Precipitation: {precip}mm total (90 days)
-Precipitation Anomaly: {anomaly}% from normal
-Extreme Weather Risk: {risk}
+Current Conditions:
+- Temperature: {temp}°C
+- Precipitation: {precip}mm/year
+- Extreme Weather Risk: {risk}
+
+Projected Changes ({years} years):
+- Temperature increase: +{temp_anomaly}°C
+- Precipitation change: {precip_anomaly:+.0f}mm/year
 
 {user_context}
 
-Provide a brief climate assessment highlighting:
-1. Key temperature and precipitation trends
-2. Extreme weather risks  
-3. Expected climate impacts in the next 5-10 years""")
+Provide a brief assessment highlighting:
+1. Current climate characteristics and habitability
+2. Expected climate changes and emerging hazards
+3. Key environmental risks for living in this location""")
         ])
         
         user_context = f"\nUser Context: {user_prompt}" if user_prompt else ""
         
         messages = prompt.format_messages(
             location=location_name,
-            temp=climate_data.temperature_avg,
-            precip=climate_data.precipitation_sum,
-            anomaly=climate_data.precipitation_anomaly,
+            years=years,
+            temp=climate_data.temperature,
+            precip=climate_data.precipitation,
             risk=climate_data.extreme_weather_risk.upper(),
+            temp_anomaly=projections["temp_anomaly"],
+            precip_anomaly=projections["precip_anomaly"],
             user_context=user_context
         )
         
@@ -115,29 +159,83 @@ Provide a brief climate assessment highlighting:
     
     async def _fetch_climate_data(self, lat: float, lon: float) -> ClimateData:
         """
-        TODO: Implement Open-Meteo API call
-        
-        Steps:
-        1. Build API URL with lat/lon and date range (last 90 days)
-        2. Fetch temperature_2m_mean and precipitation_sum
-        3. Calculate averages and anomalies
-        4. Assess risk level
-        5. Return ClimateData object
-        
-        API: https://archive-api.open-meteo.com/v1/archive
-        Params: latitude, longitude, start_date, end_date, daily=temperature_2m_mean,precipitation_sum
+        Fetch climate data from Open-Meteo API
+        Gets 90-day historical averages for temperature and precipitation
         """
-        # TODO: Implement this method
-        # Hint: Use httpx.AsyncClient() to make API call
-        # Hint: Calculate precipitation anomaly by comparing to normal (~75mm/month)
-        # Hint: Risk is "high" if anomaly < -30% or temp > 35°C
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=90)
+        
+        url = "https://archive-api.open-meteo.com/v1/archive"
+        params = {
+            "latitude": lat,
+            "longitude": lon,
+            "start_date": start_date.strftime("%Y-%m-%d"),
+            "end_date": end_date.strftime("%Y-%m-%d"),
+            "daily": "temperature_2m_mean,precipitation_sum",
+            "timezone": "auto"
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+        
+        # Calculate averages
+        temps = data["daily"]["temperature_2m_mean"]
+        precips = data["daily"]["precipitation_sum"]
+        
+        avg_temp = sum(temps) / len(temps)
+        total_precip = sum(precips)
+        # Annualize precipitation (90 days -> 365 days)
+        annual_precip = total_precip * (365 / 90)
+        
+        # Assess extreme weather risk based on climate characteristics
+        risk = self._assess_weather_risk(avg_temp, annual_precip, lat, lon)
         
         return ClimateData(
-            temperature_avg=20.0,  # TODO: Replace with real data
-            precipitation_sum=200.0,  # TODO: Replace with real data
-            precipitation_anomaly=0.0,  # TODO: Calculate this
-            extreme_weather_risk="medium"  # TODO: Assess this
+            temperature=round(avg_temp, 1),
+            precipitation=round(annual_precip, 1),
+            extreme_weather_risk=risk
         )
+    
+    def _assess_weather_risk(self, temp: float, precip: float, lat: float, lon: float) -> str:
+        """
+        Assess extreme weather risk level based on climate and location
+        """
+        risk_score = 0
+        
+        # Temperature extremes
+        if temp > 30:
+            risk_score += 2
+        elif temp > 27:
+            risk_score += 1
+        
+        # Precipitation extremes
+        if precip < 400:  # Drought-prone
+            risk_score += 2
+        elif precip > 1800:  # Flood-prone
+            risk_score += 2
+        elif precip > 1200:
+            risk_score += 1
+        
+        # Hurricane/tropical storm zones
+        # Gulf Coast, Southeast US, Caribbean
+        if (24 < lat < 32 and -98 < lon < -80) or (15 < lat < 30 and -85 < lon < -60):
+            risk_score += 2
+        
+        # Tornado alley (rough approximation)
+        if 30 < lat < 45 and -105 < lon < -85:
+            risk_score += 1
+        
+        # Map score to risk level
+        if risk_score >= 4:
+            return "extreme"
+        elif risk_score >= 3:
+            return "high"
+        elif risk_score >= 2:
+            return "medium"
+        else:
+            return "low"
 
 
 # Singleton instance
