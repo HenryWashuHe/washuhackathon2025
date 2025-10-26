@@ -11,7 +11,7 @@ import os
 from agents.base import BaseAgent
 from models.schemas import AgentState, AgentClaim, ClimateData
 from langchain_openai import ChatOpenAI
-from langchain.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 
 
 class MeteorologistAgent(BaseAgent):
