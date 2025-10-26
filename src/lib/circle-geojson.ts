@@ -1,23 +1,42 @@
-export function createCircleGeoJSON(center: { lat: number; lng: number }, radiusKm: number) {
-  const points = 64
-  const coords: [number, number][] = []
-  const distanceX = radiusKm / (111.32 * Math.cos((center.lat * Math.PI) / 180))
-  const distanceY = radiusKm / 110.574
-
-  for (let i = 0; i < points; i++) {
-    const theta = (i / points) * (2 * Math.PI)
-    const x = distanceX * Math.cos(theta)
-    const y = distanceY * Math.sin(theta)
-    coords.push([center.lng + x, center.lat + y])
+export function createCircleGeoJSON(
+  center: { lat: number; lng: number },
+  radiusKm: number
+): GeoJSON.FeatureCollection {
+  const points = 64 // Number of points to create the circle
+  const distanceRadians = radiusKm / 6371.0 // Convert km to radians (Earth's radius ≈ 6371 km)
+  const centerRadians = {
+    lat: (center.lat * Math.PI) / 180,
+    lng: (center.lng * Math.PI) / 180,
   }
-  coords.push(coords[0])
+
+  const coordinates: number[][] = []
+  for (let i = 0; i <= points; i++) {
+    const angle = (i * 2 * Math.PI) / points
+    const latRad = Math.asin(
+      Math.sin(centerRadians.lat) * Math.cos(distanceRadians) +
+        Math.cos(centerRadians.lat) * Math.sin(distanceRadians) * Math.cos(angle)
+    )
+    const lngRad =
+      centerRadians.lng +
+      Math.atan2(
+        Math.sin(angle) * Math.sin(distanceRadians) * Math.cos(centerRadians.lat),
+        Math.cos(distanceRadians) - Math.sin(centerRadians.lat) * Math.sin(latRad)
+      )
+
+    coordinates.push([(lngRad * 180) / Math.PI, (latRad * 180) / Math.PI])
+  }
 
   return {
-    type: "Feature" as const,
-    geometry: {
-      type: "Polygon" as const,
-      coordinates: [coords],
-    },
-    properties: {},
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        geometry: {
+          type: "Polygon",
+          coordinates: [coordinates],
+        },
+        properties: {},
+      },
+    ],
   }
 }

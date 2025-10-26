@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { ClimateMap } from "@/components/climate-map"
 import { Header } from "@/components/header"
 import { useState, useEffect } from "react"
@@ -8,35 +9,25 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { SearchIcon, MapPinIcon, SparklesIcon, RotateCcwIcon, InfoIcon } from "@/components/icons"
-import { PrioritySliders } from "@/components/priority-sliders"
-import { AnalysisResults } from "@/components/analysis-results"
+import { SearchIcon, MapPinIcon, RotateCcwIcon } from "@/components/icons"
+import { AlertTriangle } from "lucide-react"
+import { ClimateRiskResults } from "@/components/climate-risk-results"
 import { geocodeLocation } from "@/lib/google-maps"
-import type { PlanContext, Recommendation } from "@/types/api"
-import { ExplainModal } from "@/components/explain-modal"
-import { PolicyRecommendation } from "@/components/policy-recommendation"
 import { useSearchParams } from "next/navigation"
 
-export default function Home() {
+export default function ClimateRiskPage() {
   const searchParams = useSearchParams()
   const [location, setLocation] = useState<{ lat: number; lng: number; name: string } | null>(null)
   const [radius, setRadius] = useState(50)
   const [searchQuery, setSearchQuery] = useState("")
   const [isSearching, setIsSearching] = useState(false)
-  const [priorities, setPriorities] = useState({
-    economic: 50,
-    environmental: 50,
-    social: 50,
-  })
+  const [yearsInFuture, setYearsInFuture] = useState(10)
   const [userPrompt, setUserPrompt] = useState("")
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [showResults, setShowResults] = useState(false)
   const [hasAnalyzed, setHasAnalyzed] = useState(false)
   const [latInput, setLatInput] = useState("")
   const [lngInput, setLngInput] = useState("")
-  const [recommendation, setRecommendation] = useState<Recommendation | null>(null)
-  const [planContext, setPlanContext] = useState<PlanContext | null>(null)
-  const [showExplain, setShowExplain] = useState(false)
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return
@@ -50,7 +41,7 @@ export default function Home() {
         setLngInput(result.lng.toFixed(4))
       }
     } catch (error) {
-      console.error("[v0] Location search error:", error)
+      console.error("[climate-risk] Location search error:", error)
     } finally {
       setIsSearching(false)
     }
@@ -72,21 +63,15 @@ export default function Home() {
     setIsAnalyzing(true)
     setShowResults(true)
     setHasAnalyzed(true)
-    setRecommendation(null)
-    setPlanContext(null)
   }
 
   const handleRecalculate = () => {
     if (!location) return
     setIsAnalyzing(true)
-    setRecommendation(null)
-    setPlanContext(null)
   }
 
-  const handleAnalysisComplete = (result: { recommendation: Recommendation | null; context: PlanContext | null }) => {
+  const handleAnalysisComplete = () => {
     setIsAnalyzing(false)
-    setRecommendation(result.recommendation)
-    setPlanContext(result.context)
   }
 
   // Handle quickstart parameters
@@ -95,6 +80,7 @@ export default function Home() {
     const lat = searchParams.get('lat')
     const lng = searchParams.get('lng')
     const locationName = searchParams.get('location')
+    const years = searchParams.get('years')
     
     if (quickstart && lat && lng) {
       const parsedLat = parseFloat(lat)
@@ -109,6 +95,13 @@ export default function Home() {
         setLocation(newLocation)
         setLatInput(parsedLat.toFixed(4))
         setLngInput(parsedLng.toFixed(4))
+        
+        if (years) {
+          const parsedYears = parseInt(years)
+          if (!isNaN(parsedYears)) {
+            setYearsInFuture(parsedYears)
+          }
+        }
         
         // Auto-start analysis after a brief delay to show the location
         setTimeout(() => {
@@ -125,25 +118,25 @@ export default function Home() {
       <Header />
       
       {/* Page Title Bar */}
-      <div className="w-full bg-gradient-to-r from-green-600 to-blue-600 text-white py-3 px-6">
+      <div className="w-full bg-gradient-to-r from-red-600 to-orange-600 text-white py-3 px-6">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <a href="/landing" className="p-1.5 hover:bg-white/20 rounded-lg transition-colors">
+            <Link href="/landing" className="p-1.5 hover:bg-white/20 rounded-lg transition-colors">
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
               </svg>
-            </a>
+            </Link>
             <div className="border-l border-white/30 h-6 mx-2" />
-            <SparklesIcon className="h-5 w-5" />
-            <h1 className="text-lg font-bold">Agricultural Climate Adaptation</h1>
-            <span className="text-sm opacity-80 hidden md:inline">Multi-agent strategy synthesis</span>
+            <AlertTriangle className="h-5 w-5" />
+            <h1 className="text-lg font-bold">Climate Risk Assessment</h1>
+            <span className="text-sm opacity-80 hidden md:inline">Long-term livability analysis</span>
           </div>
-          <a href="/climate-risk" className="text-sm underline hover:no-underline flex items-center gap-1">
-            Switch to Risk Assessment
+          <Link href="/" className="text-sm underline hover:no-underline flex items-center gap-1">
+            Switch to Agricultural
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
-          </a>
+          </Link>
         </div>
       </div>
 
@@ -189,7 +182,7 @@ export default function Home() {
                   <Input
                     id="lat"
                     type="number"
-                    placeholder="-1.286"
+                    placeholder="38.6270"
                     step="0.0001"
                     value={latInput}
                     onChange={(e) => setLatInput(e.target.value)}
@@ -203,7 +196,7 @@ export default function Home() {
                   <Input
                     id="lng"
                     type="number"
-                    placeholder="36.817"
+                    placeholder="-90.1994"
                     step="0.0001"
                     value={lngInput}
                     onChange={(e) => setLngInput(e.target.value)}
@@ -214,7 +207,7 @@ export default function Home() {
             </div>
 
             {location && (
-              <Card className="p-4 bg-blue-500/10 border-blue-500/20">
+              <Card className="p-4 bg-red-500/10 border-red-500/20">
                 <Label className="text-sm font-medium mb-2 block">Selected Location</Label>
                 <p className="text-sm text-foreground">{location.name}</p>
                 <p className="text-xs text-muted-foreground mt-1">
@@ -234,12 +227,12 @@ export default function Home() {
         {/* Controls Section */}
         <Card className="p-6 bg-card space-y-6">
           <div>
-            <h2 className="text-xl font-bold text-foreground mb-4">Analysis Parameters</h2>
+            <h2 className="text-xl font-bold text-foreground mb-4">Risk Analysis Parameters</h2>
 
             <div className="space-y-6">
               <div>
                 <Label htmlFor="radius" className="text-sm font-medium mb-2 block">
-                  Area of Interest: {radius} km
+                  Analysis Radius: {radius} km
                 </Label>
                 <Input
                   id="radius"
@@ -257,7 +250,30 @@ export default function Home() {
                 </div>
               </div>
 
-              <PrioritySliders priorities={priorities} onChange={setPriorities} />
+              {/* Years in the Future slider */}
+              <Card className="p-4 bg-gradient-to-br from-red-500/10 to-orange-500/10 border-red-500/20">
+                <Label htmlFor="years" className="text-sm font-medium mb-2 block">
+                  Time Horizon: {yearsInFuture} {yearsInFuture === 1 ? 'year' : 'years'}
+                </Label>
+                <Input
+                  id="years"
+                  type="range"
+                  min="1"
+                  max="100"
+                  step="1"
+                  value={yearsInFuture}
+                  onChange={(e) => setYearsInFuture(Number(e.target.value))}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                  <span>1 year</span>
+                  <span>50 years</span>
+                  <span>100 years</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Assess climate livability risk over your planning horizon
+                </p>
+              </Card>
 
               <div>
                 <Label htmlFor="userPrompt" className="text-sm font-medium mb-2 block">
@@ -265,13 +281,13 @@ export default function Home() {
                 </Label>
                 <Textarea
                   id="userPrompt"
-                  placeholder="Add specific questions or context for the AI agents to consider during analysis... (e.g., 'Focus on drought resilience' or 'Consider impact on smallholder farmers')"
+                  placeholder="Add specific questions or context for the risk analysis... (e.g., 'Focus on hurricane risk' or 'Consider coastal flooding')"
                   value={userPrompt}
                   onChange={(e) => setUserPrompt(e.target.value)}
                   className="min-h-[100px] resize-y"
                 />
                 <p className="text-xs text-muted-foreground mt-2">
-                  Provide additional context or specific questions to guide the climate analysis
+                  Provide additional context or specific risks to assess
                 </p>
               </div>
 
@@ -280,11 +296,11 @@ export default function Home() {
                   <Button 
                     onClick={handleAnalyze} 
                     disabled={!location || isAnalyzing} 
-                    className="w-full disabled:opacity-50 disabled:cursor-not-allowed" 
+                    className="w-full bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700 disabled:opacity-50 disabled:cursor-not-allowed" 
                     size="lg"
                   >
-                    <SparklesIcon className="h-4 w-4 mr-2" />
-                    {!location ? "Select a location first" : isAnalyzing ? "Analyzing..." : "Analyze Climate Impact"}
+                    <AlertTriangle className="h-4 w-4 mr-2" />
+                    {!location ? "Select a location first" : isAnalyzing ? "Analyzing..." : "Analyze Climate Risk"}
                   </Button>
                 )}
 
@@ -293,17 +309,12 @@ export default function Home() {
                     <Button 
                       onClick={handleRecalculate} 
                       disabled={!location || isAnalyzing} 
-                      className="flex-1 disabled:opacity-50 disabled:cursor-not-allowed" 
+                      className="flex-1 bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700 disabled:opacity-50 disabled:cursor-not-allowed" 
                       size="lg"
                     >
                       <RotateCcwIcon className="h-4 w-4 mr-2" />
-                      {!location ? "Select a location first" : isAnalyzing ? "Analyzing..." : "Recalculate"}
+                      {!location ? "Select a location first" : isAnalyzing ? "Analyzing..." : "Recalculate Risk"}
                     </Button>
-                    {recommendation && (
-                      <Button onClick={() => setShowExplain(true)} variant="outline" size="lg">
-                        <InfoIcon className="h-4 w-4" />
-                      </Button>
-                    )}
                   </div>
                 )}
               </div>
@@ -313,22 +324,16 @@ export default function Home() {
 
         {/* Results Section */}
         {showResults && location && (
-          <AnalysisResults
+          <ClimateRiskResults
             location={location}
             radius={radius}
-            priorities={priorities}
+            yearsInFuture={yearsInFuture}
             userPrompt={userPrompt}
             isAnalyzing={isAnalyzing}
             onAnalysisComplete={handleAnalysisComplete}
           />
         )}
-
-        {showResults && (
-          <PolicyRecommendation recommendation={recommendation} context={planContext} isAnalyzing={isAnalyzing} />
-        )}
       </div>
-
-      <ExplainModal open={showExplain} onOpenChange={setShowExplain} recommendation={recommendation} />
     </div>
   )
 }

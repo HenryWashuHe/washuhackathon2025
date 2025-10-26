@@ -8,7 +8,7 @@ import { SearchIcon, MapPinIcon, SparklesIcon, RotateCcwIcon, InfoIcon } from "@
 import { useState } from "react"
 import { PrioritySliders } from "@/components/priority-sliders"
 import { AnalysisResults } from "@/components/analysis-results"
-import { geocodeLocation } from "@/lib/mapbox"
+import { geocodeLocation } from "@/lib/google-maps"
 import type { PlanContext, Recommendation } from "@/types/api"
 import { ExplainModal } from "@/components/explain-modal"
 

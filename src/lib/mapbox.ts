@@ -1,10 +1,14 @@
 export function getMapboxToken() {
-  const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
+  const token = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN
   return token?.trim() ?? ""
 }
 
 export async function geocodeLocation(query: string) {
   const token = getMapboxToken()
+  
+  if (!token) {
+    throw new Error("Mapbox access token not configured")
+  }
 
   const response = await fetch(
     `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${token}&limit=1`,
@@ -19,7 +23,11 @@ export async function geocodeLocation(query: string) {
   if (data.features && data.features.length > 0) {
     const [lng, lat] = data.features[0].center
     const name = data.features[0].place_name
-    return { lat, lng, name }
+    return { 
+      lat, 
+      lng, 
+      name 
+    }
   }
 
   return null
