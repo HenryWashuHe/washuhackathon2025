@@ -12,7 +12,7 @@ import { SearchIcon, MapPinIcon, SparklesIcon, RotateCcwIcon, InfoIcon } from "@
 import { PrioritySliders } from "@/components/priority-sliders"
 import { AnalysisResults } from "@/components/analysis-results"
 import { geocodeLocation } from "@/lib/mapbox"
-import type { Recommendation } from "@/types/api"
+import type { PlanContext, Recommendation } from "@/types/api"
 import { ExplainModal } from "@/components/explain-modal"
 import { PolicyRecommendation } from "@/components/policy-recommendation"
 
@@ -33,6 +33,7 @@ export default function Home() {
   const [latInput, setLatInput] = useState("")
   const [lngInput, setLngInput] = useState("")
   const [recommendation, setRecommendation] = useState<Recommendation | null>(null)
+  const [planContext, setPlanContext] = useState<PlanContext | null>(null)
   const [showExplain, setShowExplain] = useState(false)
 
   const handleSearch = async () => {
@@ -70,19 +71,20 @@ export default function Home() {
     setShowResults(true)
     setHasAnalyzed(true)
     setRecommendation(null)
+    setPlanContext(null)
   }
 
   const handleRecalculate = () => {
     if (!location) return
     setIsAnalyzing(true)
     setRecommendation(null)
+    setPlanContext(null)
   }
 
-  const handleAnalysisComplete = (rec: Recommendation | null) => {
+  const handleAnalysisComplete = (result: { recommendation: Recommendation | null; context: PlanContext | null }) => {
     setIsAnalyzing(false)
-    if (rec) {
-      setRecommendation(rec)
-    }
+    setRecommendation(result.recommendation)
+    setPlanContext(result.context)
   }
 
   return (
@@ -256,7 +258,7 @@ export default function Home() {
         )}
 
         {showResults && (
-          <PolicyRecommendation recommendation={recommendation} isAnalyzing={isAnalyzing} />
+          <PolicyRecommendation recommendation={recommendation} context={planContext} isAnalyzing={isAnalyzing} />
         )}
       </div>
 

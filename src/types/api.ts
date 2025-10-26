@@ -58,3 +58,18 @@ export interface Recommendation {
   }>
   explanation: string
 }
+
+export interface PlanContext {
+  location: Location
+  radius: number
+  priorities: Priorities
+  precipitationAnomaly?: number
+  temperatureAvg?: number
+  extremeWeatherRisk?: string
+  yieldChange?: number
+  waterStress?: number
+  soilHealth?: number
+  incomeChange?: number
+  adaptationCost?: number
+  notes?: string[]
+}

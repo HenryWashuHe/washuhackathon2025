@@ -9,7 +9,7 @@ import { useState } from "react"
 import { PrioritySliders } from "@/components/priority-sliders"
 import { AnalysisResults } from "@/components/analysis-results"
 import { geocodeLocation } from "@/lib/mapbox"
-import type { Recommendation } from "@/types/api"
+import type { PlanContext, Recommendation } from "@/types/api"
 import { ExplainModal } from "@/components/explain-modal"
 
 interface ControlPanelProps {
@@ -69,18 +69,18 @@ export function ControlPanel({ location, radius, onLocationChange, onRadiusChang
     setIsAnalyzing(true)
     setShowResults(true)
     setHasAnalyzed(true)
+    setRecommendation(null)
   }
 
   const handleRecalculate = () => {
     if (!location) return
     setIsAnalyzing(true)
+    setRecommendation(null)
   }
 
-  const handleAnalysisComplete = (rec: Recommendation | null) => {
+  const handleAnalysisComplete = (result: { recommendation: Recommendation | null; context: PlanContext | null }) => {
     setIsAnalyzing(false)
-    if (rec) {
-      setRecommendation(rec)
-    }
+    setRecommendation(result.recommendation)
   }
 
   return (
@@ -216,6 +216,7 @@ export function ControlPanel({ location, radius, onLocationChange, onRadiusChang
               location={location}
               radius={radius}
               priorities={priorities}
+              userPrompt={undefined}
               isAnalyzing={isAnalyzing}
               onAnalysisComplete={handleAnalysisComplete}
             />

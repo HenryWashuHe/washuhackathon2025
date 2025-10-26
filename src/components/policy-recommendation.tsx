@@ -10,14 +10,17 @@ import {
   TrendingUpIcon,
   UsersIcon,
 } from "@/components/icons"
-import type { Recommendation, StrategyValue } from "@/types/api"
+import type { PlanContext, Recommendation, StrategyValue } from "@/types/api"
 
 interface PolicyRecommendationProps {
   recommendation: Recommendation | null
+  context: PlanContext | null
   isAnalyzing: boolean
 }
 
 const formatPercent = (value: number): string => `${value >= 0 ? "+" : ""}${(value * 100).toFixed(1)}%`
+const formatCurrency = (value: number): string =>
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value)
 
 const CHART_GOOD = "text-emerald-400"
 const CHART_BAD = "text-rose-400"
@@ -92,6 +95,109 @@ const buildActionPlan = (strategy: Recommendation["strategy"]): ActionItem[] => 
   return actions
 }
 
+type JustificationPoint = { heading: string; detail: string }
+
+const describePrecipitation = (anomaly: number): string => {
+  if (anomaly <= -30) return `${Math.abs(anomaly).toFixed(0)}% below normal rainfall signals persistent drought pressure.`
+  if (anomaly <= -15) return `Rainfall is ${Math.abs(anomaly).toFixed(0)}% below seasonal norms, raising water stress.`
+  if (anomaly >= 25) return `Rainfall is ${anomaly.toFixed(0)}% above average, increasing flood and disease risk.`
+  if (anomaly >= 10) return `Wetter conditions (+${anomaly.toFixed(0)}%) demand drainage readiness and soil protection.`
+  return `Rainfall anomaly of ${anomaly.toFixed(0)}% indicates near-normal moisture availability.`
+}
+
+const describeWaterStress = (index: number): string => {
+  if (index >= 0.7) return "Severe water stress index (>0.7) makes supplemental irrigation critical."
+  if (index >= 0.5) return "Moderate-to-high water stress (>0.5) supports investing in efficient irrigation and storage."
+  if (index >= 0.3) return "Moderate water stress (>0.3) warrants water harvesting and soil moisture conservation."
+  return "Water stress index remains low, so current water management is adequate."
+}
+
+const describeSoilHealth = (index: number): string => {
+  if (index <= 0.3) return "Soil health index below 0.3 signals urgent need for organic matter and soil regeneration."
+  if (index <= 0.45) return "Soil health around 0.4 calls for active soil improvement to stabilise yields."
+  if (index >= 0.65) return "Healthy soils (>0.65) enable scaling resilient practices."
+  return "Soil health is moderate; continued enrichment will support crop diversification."
+}
+
+const describeRisk = (risk?: string): string | null => {
+  if (!risk) return null
+  const normalized = risk.toLowerCase()
+  if (normalized === "high") return "High extreme-weather risk elevates the value of irrigation, diversification, and finance buffers."
+  if (normalized === "medium") return "Medium extreme-weather risk warrants short-term adaptation and early financing commitments."
+  if (normalized === "low") return "Low extreme-weather risk allows phased investments while sustaining preparedness."
+  return null
+}
+
+const buildJustification = (context: PlanContext | null): JustificationPoint[] => {
+  if (!context) return []
+  const points: JustificationPoint[] = []
+  const {
+    precipitationAnomaly,
+    temperatureAvg,
+    extremeWeatherRisk,
+    yieldChange,
+    waterStress,
+    soilHealth,
+    incomeChange,
+    adaptationCost,
+    priorities,
+    location,
+    radius,
+  } = context
+
+  points.push({
+    heading: "Regional focus",
+    detail: `${location.name} within a ${radius} km radius, with priorities weighted Economic ${priorities.economic} / Environmental ${priorities.environmental} / Social ${priorities.social}.`,
+  })
+
+  if (typeof precipitationAnomaly === "number") {
+    points.push({
+      heading: "Climate signal",
+      detail:
+        describePrecipitation(precipitationAnomaly) +
+        (typeof temperatureAvg === "number" ? ` Avg. temperature ~${temperatureAvg.toFixed(1)}°C.` : ""),
+    })
+  }
+
+  const riskNote = describeRisk(extremeWeatherRisk)
+  if (riskNote) {
+    points.push({ heading: "Hazard risk", detail: riskNote })
+  }
+
+  if (typeof yieldChange === "number") {
+    const yieldMsg =
+      yieldChange < 0
+        ? `Agronomist projects ${Math.abs(yieldChange).toFixed(0)}% yield losses, hence the diversified crop mix and soil upgrades.`
+        : `Yield outlook improves by ${yieldChange.toFixed(0)}%, allowing targeted expansion of resilient crops.`
+    points.push({ heading: "Yield outlook", detail: yieldMsg })
+  }
+
+  if (typeof waterStress === "number") {
+    points.push({ heading: "Water availability", detail: describeWaterStress(waterStress) })
+  }
+
+  if (typeof soilHealth === "number") {
+    points.push({ heading: "Soil condition", detail: describeSoilHealth(soilHealth) })
+  }
+
+  if (typeof incomeChange === "number") {
+    const incomeMsg =
+      incomeChange < 0
+        ? `Economist estimates farm income falling ${Math.abs(incomeChange).toFixed(1)}%, reinforcing the call for phased financing.`
+        : `Income uplift of ${incomeChange.toFixed(1)}% can co-fund near-term investments.`
+    points.push({ heading: "Economic impact", detail: incomeMsg })
+  }
+
+  if (typeof adaptationCost === "number") {
+    points.push({
+      heading: "Capital needs",
+      detail: `Adaptation budget approximates ${formatCurrency(adaptationCost)}, so sequencing investments avoids fiscal shocks.`,
+    })
+  }
+
+  return points
+}
+
 const buildImpactSummary = (impact: Recommendation["impact"]) => {
   const rows = [
     {
@@ -163,7 +269,7 @@ const buildImpactSummary = (impact: Recommendation["impact"]) => {
   })
 }
 
-export function PolicyRecommendation({ recommendation, isAnalyzing }: PolicyRecommendationProps) {
+export function PolicyRecommendation({ recommendation, context, isAnalyzing }: PolicyRecommendationProps) {
   if (isAnalyzing) {
     return (
       <Card className="p-5 bg-muted/30 animate-pulse space-y-3">
@@ -189,6 +295,7 @@ export function PolicyRecommendation({ recommendation, isAnalyzing }: PolicyReco
   const cropMix = formatCropMix(recommendation.strategy?.crop_mix)
   const actions = buildActionPlan(recommendation.strategy)
   const impacts = buildImpactSummary(recommendation.impact)
+  const justification = buildJustification(context)
 
   const timeline =
     typeof recommendation.strategy?.adaptation_timeline === "string"
@@ -219,6 +326,24 @@ export function PolicyRecommendation({ recommendation, isAnalyzing }: PolicyReco
         </div>
         <p className="text-base leading-7 text-foreground/90">{recommendation.explanation}</p>
       </div>
+
+      <section className="space-y-2">
+        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Why this plan fits</h4>
+        {justification.length > 0 ? (
+          <ul className="space-y-2">
+            {justification.map((item, index) => (
+              <li key={`${item.heading}-${index}`} className="border border-border/40 rounded-lg bg-background/60 px-4 py-3">
+                <div className="text-sm font-semibold text-foreground">{item.heading}</div>
+                <p className="text-xs text-muted-foreground leading-relaxed mt-1">{item.detail}</p>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Awaiting upstream climate and economic signals to justify the policy mix.
+          </p>
+        )}
+      </section>
 
       <div className="grid gap-6 md:grid-cols-12">
         <section className="md:col-span-5 space-y-3">
