@@ -143,11 +143,9 @@ export function AnalysisResults({
               const payload = JSON.parse(line.slice(6)) as StreamPayload
               allMessages.push(payload)
 
-              if (typeof payload.role === "string" && typeof payload.content === "string") {
-                setDebateMessages((prev) => [
-                  ...prev,
-                  { role: payload.role, content: payload.content },
-                ])
+              const { role, content } = payload
+              if (typeof role === "string" && typeof content === "string") {
+                setDebateMessages((prev) => [...prev, { role, content }])
               }
 
               if (payload.role === "meteorologist" && Array.isArray(payload.claims)) {
