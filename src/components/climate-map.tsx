@@ -31,12 +31,22 @@ export function ClimateMap({ location, radius, onLocationChange }: ClimateMapPro
   const mapboxLib = useRef<MapboxLib | null>(null)
   const [mapboxReady, setMapboxReady] = useState(false)
   const [token] = useState<string>(() => getMapboxToken())
+  console.log("Mapbox token:", token)
   const [mapLoaded, setMapLoaded] = useState(false)
   const [mapStatus, setMapStatus] = useState<"idle" | "loading" | "ready" | "error">(token ? "idle" : "error")
   const [geoStatus, setGeoStatus] = useState<"idle" | "locating" | "error">("idle")
+  const [styleMode, setStyleMode] = useState<"standard" | "satellite">("standard")
+  const [searchQuery, setSearchQuery] = useState("")
+  const [searchResults, setSearchResults] = useState<
+    Array<{ id: string; name: string; center: [number, number] }>
+  >([])
+  const [searchStatus, setSearchStatus] = useState<"idle" | "loading" | "error">("idle")
   const hasMapboxToken = Boolean(token)
 
-  const mapStyle = useMemo(() => (hasMapboxToken ? "mapbox://styles/mapbox/dark-v11" : FALLBACK_STYLE), [hasMapboxToken])
+  const mapStyle = useMemo(() => {
+    if (!hasMapboxToken) return FALLBACK_STYLE
+    return styleMode === "satellite" ? "mapbox://styles/mapbox/satellite-streets-v12" : "mapbox://styles/mapbox/dark-v11"
+  }, [hasMapboxToken, styleMode])
 
   useEffect(() => {
     let isMounted = true
@@ -86,6 +96,7 @@ export function ClimateMap({ location, radius, onLocationChange }: ClimateMapPro
     map.current.on("load", () => {
       setMapLoaded(true)
       setMapStatus("ready")
+      map.current?.resize()
 
       // Add atmosphere effect
       if (map.current) {
@@ -117,6 +128,33 @@ export function ClimateMap({ location, radius, onLocationChange }: ClimateMapPro
       setMapStatus("idle")
     }
   }, [token, mapStyle, hasMapboxToken, mapboxReady, onLocationChange])
+
+  const initialStyleApplied = useRef(false)
+
+  // Switch style when toggled (skip initial render to avoid interrupting first load)
+  useEffect(() => {
+    if (!map.current || !hasMapboxToken) return
+    if (!initialStyleApplied.current) {
+      initialStyleApplied.current = true
+      return
+    }
+
+    setMapLoaded(false)
+    map.current.setStyle(mapStyle)
+    map.current.once("styledata", () => {
+      setMapLoaded(true)
+      map.current?.resize()
+      if (styleMode === "standard") {
+        map.current?.setFog({
+          color: "rgb(10, 10, 15)",
+          "high-color": "rgb(20, 20, 30)",
+          "horizon-blend": 0.02,
+          "space-color": "rgb(5, 5, 10)",
+          "star-intensity": 0.6,
+        })
+      }
+    })
+  }, [mapStyle, hasMapboxToken, styleMode])
 
   // Update marker and circle when location changes
   useEffect(() => {
@@ -211,6 +249,47 @@ export function ClimateMap({ location, radius, onLocationChange }: ClimateMapPro
     })
   }, [location, radius, mapLoaded, onLocationChange])
 
+  // Geocoding search
+  useEffect(() => {
+    if (!hasMapboxToken || !token) return
+    if (searchQuery.trim().length < 3) {
+      setSearchResults([])
+      setSearchStatus("idle")
+      return
+    }
+
+    const controller = new AbortController()
+    const timeout = setTimeout(async () => {
+      try {
+        setSearchStatus("loading")
+        const res = await fetch(
+          `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(searchQuery)}.json?access_token=${token}&limit=5`,
+          { signal: controller.signal },
+        )
+        if (!res.ok) throw new Error("Geocoding failed")
+        const data = await res.json()
+        type Feature = { id: string; place_name: string; center: [number, number] }
+        const features = (data.features || []).map((feature: Feature) => ({
+          id: feature.id,
+          name: feature.place_name,
+          center: feature.center as [number, number],
+        }))
+        setSearchResults(features)
+        setSearchStatus("idle")
+      } catch (error) {
+        if (controller.signal.aborted) return
+        console.error("[map] geocoder error", error)
+        setSearchStatus("error")
+        setSearchResults([])
+      }
+    }, 350)
+
+    return () => {
+      controller.abort()
+      clearTimeout(timeout)
+    }
+  }, [searchQuery, hasMapboxToken, token])
+
   const handleLocateMe = useCallback(() => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setGeoStatus("error")
@@ -251,6 +330,38 @@ export function ClimateMap({ location, radius, onLocationChange }: ClimateMapPro
       duration: 1000,
     })
   }, [])
+
+  const handleZoom = useCallback((direction: "in" | "out") => {
+    if (!map.current) return
+    if (direction === "in") {
+      map.current.zoomIn({ duration: 300 })
+    } else {
+      map.current.zoomOut({ duration: 300 })
+    }
+  }, [])
+
+  const handleStyleToggle = useCallback(() => {
+    if (!hasMapboxToken) return
+    setStyleMode((prev) => (prev === "standard" ? "satellite" : "standard"))
+  }, [hasMapboxToken])
+
+  const handleSelectResult = useCallback(
+    (result: { name: string; center: [number, number] }) => {
+      setSearchResults([])
+      setSearchQuery(result.name)
+      onLocationChange({
+        lat: result.center[1],
+        lng: result.center[0],
+        name: result.name,
+      })
+      map.current?.flyTo({
+        center: result.center,
+        zoom: 8,
+        duration: 1200,
+      })
+    },
+    [onLocationChange],
+  )
 
   return (
     <div className="relative w-full h-full rounded-[32px] border border-border bg-panel overflow-hidden">
@@ -297,6 +408,30 @@ export function ClimateMap({ location, radius, onLocationChange }: ClimateMapPro
       )}
 
       <div className="absolute bottom-6 right-6 flex flex-col gap-2">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => handleZoom("in")}
+            className="rounded-full border border-white/40 bg-black/50 p-2 text-white shadow-lg backdrop-blur transition hover:bg-black/70"
+          >
+            +
+          </button>
+          <button
+            type="button"
+            onClick={() => handleZoom("out")}
+            className="rounded-full border border-white/40 bg-black/50 p-2 text-white shadow-lg backdrop-blur transition hover:bg-black/70"
+          >
+            −
+          </button>
+          <button
+            type="button"
+            onClick={handleStyleToggle}
+            disabled={!hasMapboxToken}
+            className="rounded-full border border-white/40 bg-black/50 px-3 py-2 text-xs font-semibold text-white shadow-lg backdrop-blur transition hover:bg-black/70 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {styleMode === "satellite" ? "Standard" : "Satellite"}
+          </button>
+        </div>
         <button
           type="button"
           onClick={handleLocateMe}
@@ -320,6 +455,37 @@ export function ClimateMap({ location, radius, onLocationChange }: ClimateMapPro
           <p className="text-xs font-medium">
             We couldn&apos;t access your location. Check browser permissions and try again.
           </p>
+        </div>
+      )}
+      {hasMapboxToken && (
+        <div className="absolute right-6 top-6 w-72 max-w-[80vw]">
+          <div className="rounded-2xl border border-white/20 bg-black/50 p-3 text-white shadow-lg backdrop-blur">
+            <label className="text-xs uppercase tracking-wide text-white/70">Search places</label>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Type a city, region, or coordinates"
+              className="mt-1 w-full rounded-xl border border-white/20 bg-black/40 px-3 py-2 text-sm placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-white/40"
+            />
+            {searchStatus === "loading" && <p className="mt-2 text-xs text-white/60">Searching…</p>}
+            {searchStatus === "error" && (
+              <p className="mt-2 text-xs text-red-300">Search failed — try again or refine your query.</p>
+            )}
+            {searchResults.length > 0 && (
+              <ul className="mt-2 max-h-48 overflow-y-auto rounded-xl border border-white/10 bg-black/60">
+                {searchResults.map((result) => (
+                  <li
+                    key={result.id}
+                    className="cursor-pointer px-3 py-2 text-sm hover:bg-white/10"
+                    onClick={() => handleSelectResult(result)}
+                  >
+                    {result.name}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       )}
 
