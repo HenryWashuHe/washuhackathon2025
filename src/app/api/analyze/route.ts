@@ -63,6 +63,8 @@ Important constraints:
 - Respond using plain text sentences without Markdown headings or bullet symbols. Use newline-separated sentences only.`
 
         let meteorologistOutput = ""
+        let hazardAnalystOutput = ""
+        let hazardList: string[] = []
         try {
           const meteorologistResult = await streamText({
             model: openai("gpt-4o-mini"),
@@ -83,11 +85,55 @@ Important constraints:
           console.error("Meteorologist error:", error)
         }
 
+        // HAZARD ANALYST AGENT - Focused hazard synthesis
+        const hazardPrompt = `You are a climate hazard specialist identifying the most probable threats for ${location.name} over the next ${timeHorizon} years.
+
+CLIMATE DATA AND METEOROLOGIST INSIGHT:
+${climateDataText}
+${climateGuidance ? `\n${climateGuidance}` : ""}
+METEOROLOGIST SUMMARY:
+${meteorologistOutput}
+
+Allowed hazard categories: Wildfires, Extreme Heat, Flooding, Air Pollution, Storm, Drought.
+
+Choose the top two hazard categories that present the greatest long-term risk. Respond in plain text using the exact format:
+Hazards: Hazard One; Hazard Two
+Justification: (two concise sentences explaining the selection)
+
+Never include categories outside the allowed list and never add bullet points.`
+
+        try {
+          const hazardResult = await streamText({
+            model: openai("gpt-4o-mini"),
+            prompt: hazardPrompt,
+            maxOutputTokens: 250,
+          })
+
+          for await (const chunk of hazardResult.textStream) {
+            hazardAnalystOutput += chunk
+          }
+
+          hazardList = parseHazardAgentOutput(hazardAnalystOutput)
+
+          if (hazardAnalystOutput.trim()) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+              role: "hazard-analyst",
+              content: hazardAnalystOutput
+            })}\n\n`))
+            await new Promise((resolve) => setTimeout(resolve, 400))
+          }
+        } catch (error) {
+          console.error("Hazard analyst error:", error)
+        }
+
         // ECONOMIST AGENT - Economic impact analysis
         const economistPrompt = `You are an economist specializing in climate economics, analyzing financial impacts for ${location.name} over ${timeHorizon} years.
 
 CLIMATE CONTEXT FROM METEOROLOGIST:
 ${meteorologistOutput}
+
+HAZARD ANALYST INSIGHT:
+${hazardAnalystOutput}
 
 REAL CLIMATE DATA:
 ${climateDataText}
@@ -130,6 +176,9 @@ Important constraints:
 
 METEOROLOGIST ANALYSIS:
 ${meteorologistOutput}
+
+HAZARD ANALYST FINDINGS:
+${hazardAnalystOutput}
 
 ECONOMIST ANALYSIS:
 ${economistOutput}
@@ -189,6 +238,7 @@ Additional requirements:
         const riskData = parseAIOutputs(
           plannerOutput,
           economistOutput,
+          hazardList,
           climateData,
           priorities,
           timeHorizon
@@ -227,18 +277,19 @@ Additional requirements:
 function parseAIOutputs(
   plannerText: string,
   economistText: string,
+  hazardSeeds: string[],
   climate: ClimateData | null,
   priorities?: { environmental: number; economic: number; social: number },
   timeHorizon = 10
 ) {
   const riskScores = {
-    environmental: 50,
-    economic: 50,
-    social: 50,
-    overall: 50
+    environmental: 30,
+    economic: 30,
+    social: 30,
+    overall: 30
   }
   
-  const collectedHazards: string[] = []
+  const collectedHazards: string[] = [...hazardSeeds]
   const economicImpact = {
     annual_loss_per_capita: 5000,
     adaptation_cost: 15000,
@@ -448,6 +499,28 @@ function isRelevantHazard(text: string) {
 
 type CanonicalHazardKey = "wildfires" | "extremeHeat" | "flooding" | "airPollution" | "storm" | "drought"
 
+function parseHazardAgentOutput(text: string): string[] {
+  const match = text.match(/hazards?\s*:\s*([^\n]+)/i)
+  if (!match) return []
+  const raw = match[1]
+  const parsed = raw
+    .split(/[;,]/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      const canonical = canonicalizeHazard(part)
+      if (!canonical) return null
+      return CANONICAL_HAZARD_LABELS[canonical]
+    })
+    .filter((value, index, arr) => value && arr.indexOf(value) === index) as string[]
+
+  if (parsed.length > 0) {
+    return parsed.slice(0, 2)
+  }
+
+  return []
+}
+
 const CANONICAL_HAZARD_LABELS: Record<CanonicalHazardKey, string> = {
   wildfires: "Wildfires",
   extremeHeat: "Extreme Heat",
@@ -644,13 +717,19 @@ function adjustScoresForTime(
     }
   }
 
-  const environmental = clampScore(baseScores.environmental + growthFactor + climateEnv)
-  const economic = clampScore(baseScores.economic + econGrowthFactor + climateEcon)
+  const baseEnv = clampScore(baseScores.environmental)
+  const baseEcon = clampScore(baseScores.economic)
+  const baseSocInput = Number.isFinite(baseScores.social) && baseScores.social !== 50
+    ? clampScore(baseScores.social)
+    : Math.round((baseEnv + baseEcon) / 2)
 
-  const socialBase = Number.isFinite(baseScores.social) && baseScores.social !== 50
-    ? baseScores.social
-    : Math.round((environmental + economic) / 2)
-  const social = clampScore(socialBase + socialGrowthFactor + climateSocial)
+  const normalizedEnv = Math.max(0, baseEnv - 10)
+  const normalizedEcon = Math.max(0, baseEcon - 12)
+  const normalizedSoc = Math.max(0, baseSocInput - 10)
+
+  const environmental = clampScore(normalizedEnv + growthFactor + climateEnv)
+  const economic = clampScore(normalizedEcon + econGrowthFactor + climateEcon)
+  const social = clampScore(normalizedSoc + socialGrowthFactor + climateSocial)
 
   const envWeight = priorities?.environmental ?? 34
   const econWeight = priorities?.economic ?? 33

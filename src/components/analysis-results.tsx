@@ -243,7 +243,8 @@ export function AnalysisResults({
               
               if (data.role && data.content && data.role !== "system") {
                 setDebateMessages((prev) => {
-                  const next = [...prev, data]
+                  const filtered = prev.filter((msg) => msg.role !== data.role)
+                  const next = [...filtered, data]
                   return next.slice(-6)
                 })
               }
