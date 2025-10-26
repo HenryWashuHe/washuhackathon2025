@@ -22,7 +22,11 @@ app = FastAPI(title="SCDS Agent API", version="1.0.0")
 # CORS - Allow Next.js frontend to connect
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://miaomiaobadcat.com", "http://localhost:3000", "https://wwwmiaomiaobadcat.com/"],
+    allow_origins=[
+        "https://miaomiaobadcat.com",
+        "https://www.miaomiaobadcat.com",
+        "http://localhost:3000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
