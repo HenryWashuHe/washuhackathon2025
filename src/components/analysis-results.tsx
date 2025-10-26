@@ -110,6 +110,9 @@ export function AnalysisResults({
           priorities,
           userPrompt: userPrompt || undefined,
         }),
+      }).catch((error) => {
+        console.error("[Analysis] Network error:", error)
+        throw new Error("Failed to connect to the analysis service. Please check your connection and try again.")
       })
 
       if (!response.ok) throw new Error("Analysis failed")

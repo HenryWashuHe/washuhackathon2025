@@ -3,12 +3,18 @@
  * This allows the frontend to connect to the real agent system
  */
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
+// Use backend URL from environment or fallback to production/dev defaults
+const BACKEND_URL = process.env.BACKEND_URL || 
+  (process.env.NODE_ENV === 'production' 
+    ? 'https://api.miaomiaobadcat.com'
+    : 'http://localhost:8000')
 
 export async function POST(req: Request) {
   try {
     const body = await req.json()
     const { location, radius, priorities, userPrompt } = body
+
+    console.log(`[analyze] Connecting to backend at: ${BACKEND_URL}`)
 
     // Call the Python backend
     const backendResponse = await fetch(`${BACKEND_URL}/analyze`, {
@@ -25,7 +31,9 @@ export async function POST(req: Request) {
     })
 
     if (!backendResponse.ok) {
-      throw new Error(`Backend returned ${backendResponse.status}`)
+      const errorText = await backendResponse.text()
+      console.error(`[analyze] Backend error: ${backendResponse.status} - ${errorText}`)
+      throw new Error(`Backend returned ${backendResponse.status}: ${errorText}`)
     }
 
     // Stream the response from backend to frontend

@@ -245,6 +245,9 @@ export function ClimateRiskResults({
           yearsInFuture,
           userPrompt: userPrompt || undefined,
         }),
+      }).catch((error) => {
+        console.error("[ClimateRisk] Network error:", error)
+        throw new Error("Failed to connect to the risk analysis service. Please check your connection and try again.")
       })
 
       if (!response.ok) throw new Error("Risk analysis failed")

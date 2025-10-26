@@ -4,11 +4,17 @@
  * No more hardcoded data!
  */
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
+// Use backend URL from environment or fallback to production/dev defaults
+const BACKEND_URL = process.env.BACKEND_URL || 
+  (process.env.NODE_ENV === 'production' 
+    ? 'https://api.miaomiaobadcat.com'
+    : 'http://localhost:8000')
 
 export async function POST(req: Request) {
   try {
     const body = await req.json()
+    
+    console.log(`[analyze-risk] Connecting to backend at: ${BACKEND_URL}`)
     
     // Call the Python backend for real AI analysis
     const backendResponse = await fetch(`${BACKEND_URL}/analyze-risk`, {
@@ -20,7 +26,9 @@ export async function POST(req: Request) {
     })
 
     if (!backendResponse.ok) {
-      throw new Error(`Backend error: ${backendResponse.statusText}`)
+      const errorText = await backendResponse.text()
+      console.error(`[analyze-risk] Backend error: ${backendResponse.status} - ${errorText}`)
+      throw new Error(`Backend error: ${backendResponse.status} - ${backendResponse.statusText}`)
     }
 
     // Stream the response from backend to frontend

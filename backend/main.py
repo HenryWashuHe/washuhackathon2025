@@ -26,10 +26,12 @@ app.add_middleware(
         "https://miaomiaobadcat.com",
         "https://www.miaomiaobadcat.com",
         "http://localhost:3000",
+        "http://localhost:3001",  # Alternative dev port
     ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 
