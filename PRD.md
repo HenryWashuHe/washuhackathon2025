@@ -13,7 +13,6 @@ Build a multi-agent AI platform (FastAPI + LangGraph + Next.js)
 [2] CORE OBJECTIVE
 
 Deliver an MVP in 24 hours (working demo)
-
 Prove that AI + data + optimization → better climate decisions
 
 Frontend must be interactive and map-first

@@ -3,7 +3,7 @@ Base Agent class for all SCDS agents
 """
 from abc import ABC, abstractmethod
 from typing import Dict
-from datetime import datetime
+from datetime import datetime, timezone
 from models.schemas import AgentState, AgentMessage
 
 
@@ -33,5 +33,5 @@ class BaseAgent(ABC):
             message=message,
             claims=claims,
             recommendations=recommendations or [],
-            timestamp=datetime.utcnow().isoformat()
+            timestamp=datetime.now(timezone.utc).isoformat()
         )
