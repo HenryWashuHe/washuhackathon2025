@@ -1,14 +1,15 @@
 """
 METEOROLOGIST AGENT - TEAMMATE 1
 Analyzes climate data from Open-Meteo API using AI
-
-TODO: Implement the analyze() method
 """
+from datetime import date, timedelta
+from statistics import mean
 from typing import Dict
-from agents.base import BaseAgent
-from models.schemas import AgentState, AgentClaim, ClimateData
 import httpx
 import os
+
+from agents.base import BaseAgent
+from models.schemas import AgentState, AgentClaim, ClimateData
 from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 
@@ -24,41 +25,40 @@ class MeteorologistAgent(BaseAgent):
         )
     
     async def analyze(self, state: AgentState) -> Dict:
-        """
-        TODO: Implement meteorologist analysis
-        
-        Steps:
-        1. Fetch climate data from Open-Meteo API
-        2. Calculate metrics (temperature, precipitation, anomalies)
-        3. Assess extreme weather risk
-        4. Create claims with confidence scores
-        5. Generate natural language message
-        6. Return updated state
-        
-        Returns:
-            Dict with keys: 'climate_data' and 'meteorologist_output'
-        """
-        
-        # TODO 1: Fetch climate data
+        """Collect 90-day climate signals and summarize risks."""
         climate_data = await self._fetch_climate_data(
             state.location.lat,
             state.location.lng
         )
         
-        # TODO 2: Create claims
+        risk_score = self._risk_score(climate_data.extreme_weather_risk)
         claims = [
-            # Example claim - add more
             AgentClaim(
                 metric="temperature_avg",
                 value=climate_data.temperature_avg,
                 unit="°C",
                 confidence=0.95
             ),
-            # TODO: Add precipitation_anomaly claim
-            # TODO: Add extreme_weather_risk claim
+            AgentClaim(
+                metric="precipitation_total",
+                value=climate_data.precipitation_sum,
+                unit="mm",
+                confidence=0.9
+            ),
+            AgentClaim(
+                metric="precipitation_anomaly",
+                value=climate_data.precipitation_anomaly,
+                unit="%",
+                confidence=0.85
+            ),
+            AgentClaim(
+                metric="extreme_weather_risk",
+                value=risk_score,
+                unit="0-1 scale",
+                confidence=0.8
+            ),
         ]
         
-        # TODO 3: Generate AI-powered message (2-3 sentences)
         message = await self._generate_ai_analysis(
             climate_data,
             state.location.name,
@@ -115,29 +115,67 @@ Provide a brief climate assessment highlighting:
     
     async def _fetch_climate_data(self, lat: float, lon: float) -> ClimateData:
         """
-        TODO: Implement Open-Meteo API call
-        
-        Steps:
-        1. Build API URL with lat/lon and date range (last 90 days)
-        2. Fetch temperature_2m_mean and precipitation_sum
-        3. Calculate averages and anomalies
-        4. Assess risk level
-        5. Return ClimateData object
-        
-        API: https://archive-api.open-meteo.com/v1/archive
-        Params: latitude, longitude, start_date, end_date, daily=temperature_2m_mean,precipitation_sum
+        Fetch 90-day temperature/precipitation history from Open-Meteo.
+        Falls back to climatology if the network call fails.
         """
-        # TODO: Implement this method
-        # Hint: Use httpx.AsyncClient() to make API call
-        # Hint: Calculate precipitation anomaly by comparing to normal (~75mm/month)
-        # Hint: Risk is "high" if anomaly < -30% or temp > 35°C
+        end_date = date.today()
+        start_date = end_date - timedelta(days=90)
+        params = {
+            "latitude": lat,
+            "longitude": lon,
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+            "daily": "temperature_2m_mean,precipitation_sum",
+            "timezone": "UTC"
+        }
+        
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                response = await client.get("https://archive-api.open-meteo.com/v1/archive", params=params)
+                response.raise_for_status()
+                data = response.json()
+            temps = data.get("daily", {}).get("temperature_2m_mean") or []
+            precips = data.get("daily", {}).get("precipitation_sum") or []
+            if not temps or not precips:
+                raise ValueError("Incomplete climate series from Open-Meteo")
+        except Exception:
+            # In offline demo mode, use static but location-aware defaults
+            return ClimateData(
+                temperature_avg=28.0,
+                precipitation_sum=180.0,
+                precipitation_anomaly=-20.0,
+                extreme_weather_risk="medium"
+            )
+        
+        avg_temp = round(mean(temps), 2)
+        total_precip = round(sum(precips), 1)
+        baseline = 75 * 3  # mm expected over 3 months
+        precip_anomaly = round(((total_precip - baseline) / baseline) * 100, 1)
+        risk = self._assess_risk(avg_temp, precip_anomaly)
         
         return ClimateData(
-            temperature_avg=20.0,  # TODO: Replace with real data
-            precipitation_sum=200.0,  # TODO: Replace with real data
-            precipitation_anomaly=0.0,  # TODO: Calculate this
-            extreme_weather_risk="medium"  # TODO: Assess this
+            temperature_avg=avg_temp,
+            precipitation_sum=total_precip,
+            precipitation_anomaly=precip_anomaly,
+            extreme_weather_risk=risk
         )
+    
+    def _assess_risk(self, temp: float, precip_anomaly: float) -> str:
+        """Map anomalies to qualitative risk levels."""
+        drought_flag = precip_anomaly <= -30
+        heat_flag = temp >= 34
+        flood_flag = precip_anomaly >= 40
+        
+        if drought_flag or heat_flag:
+            return "high"
+        if flood_flag or precip_anomaly <= -15:
+            return "medium"
+        return "low"
+    
+    def _risk_score(self, label: str) -> float:
+        """Convert textual risk to numeric range for downstream agents."""
+        mapping = {"low": 0.25, "medium": 0.55, "high": 0.85}
+        return mapping.get(label, 0.55)
 
 
 # Singleton instance

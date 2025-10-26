@@ -1,10 +1,9 @@
 """
 ECONOMIST AGENT - TEAMMATE 3
 Analyzes economic impacts of climate and agricultural changes
-
-TODO: Implement the analyze() method
 """
-from typing import Dict
+from typing import Dict, List
+import math
 from agents.base import BaseAgent
 from models.schemas import AgentState, AgentClaim
 
@@ -15,37 +14,30 @@ class EconomistAgent(BaseAgent):
     
     async def analyze(self, state: AgentState) -> Dict:
         """
-        TODO: Implement economist analysis
-        
-        Steps:
-        1. Get climate and agricultural data from state
-        2. Calculate income impacts based on yield changes
-        3. Estimate adaptation costs
-        4. Assess economic resilience
-        5. Consider user's economic priority weight
-        6. Create claims with confidence scores
-        7. Generate natural language message
-        8. Return updated state
-        
-        Returns:
-            Dict with key: 'economist_output'
+        Translate agronomic signals into economic metrics the planner can use.
         """
-        
-        # TODO 1: Check we have required data
+        if not state.climate_data:
+            raise ValueError("Climate context required from Meteorologist")
         if not state.agronomist_output:
             raise ValueError("Agricultural data required from Agronomist")
         
-        # TODO 2: Extract yield change from agronomist's claims
         yield_change = self._extract_yield_change(state.agronomist_output.claims)
         
-        # TODO 3: Calculate economic impacts
         income_change = self._calculate_income_impact(yield_change)
         adaptation_cost = self._estimate_adaptation_cost(
             state.climate_data.extreme_weather_risk,
             state.radius
         )
+        resilience_score = self._assess_economic_resilience(income_change, adaptation_cost)
+        employment_impact = self._estimate_employment_impact(income_change, state.priorities.economic)
+        recommendations = self._build_recommendations(
+            income_change,
+            adaptation_cost,
+            resilience_score,
+            employment_impact,
+            state.priorities.economic
+        )
         
-        # TODO 4: Create claims
         claims = [
             AgentClaim(
                 metric="income_change",
@@ -53,19 +45,36 @@ class EconomistAgent(BaseAgent):
                 unit="%",
                 confidence=0.75
             ),
-            # TODO: Add adaptation_cost claim (in USD)
-            # TODO: Add economic_resilience claim (0-1 scale)
-            # TODO: Add employment_impact claim
+            AgentClaim(
+                metric="adaptation_cost",
+                value=adaptation_cost,
+                unit="USD",
+                confidence=0.65
+            ),
+            AgentClaim(
+                metric="economic_resilience",
+                value=resilience_score,
+                unit="score",
+                confidence=0.6
+            ),
+            AgentClaim(
+                metric="employment_impact",
+                value=employment_impact,
+                unit="%",
+                confidence=0.55
+            ),
         ]
         
-        # TODO 5: Generate message (2-3 sentences)
-        # Consider: state.priorities.economic weight
-        message = f"TODO: Analyze economic impacts for {state.location.name}. Mention income changes, costs, and resilience."
+        priority_weight = state.priorities.economic / 100
+        emphasis = "aggressive" if priority_weight > 0.66 else "balanced" if priority_weight > 0.33 else "cautious"
+        message = (
+            f"Farm income around {state.location.name} is set to {income_change:+.1f}% with ripple effects of "
+            f"{employment_impact:+.1f}% on seasonal labor. "
+            f"Keeping drought defenses funded will require roughly ${adaptation_cost:,.0f}, yet "
+            f"the overall resilience score sits at {resilience_score:.2f}, meaning an {emphasis} investment posture is advisable."
+        )
         
-        # Create agent message
-        agent_message = self.create_message(message, claims)
-        
-        # Return updated state
+        agent_message = self.create_message(message, claims, recommendations)
         return {
             "economist_output": agent_message
         }
@@ -93,62 +102,83 @@ class EconomistAgent(BaseAgent):
         Returns:
             float: Percentage change in farm income
         """
-        # TODO: Implement this logic
-        # Hint: income_change = yield_change * 0.7 (simplified)
-        # Add randomness or market factors if needed
-        return yield_change * 0.7
+        # Base relationship between yield and income
+        base_ratio = 0.75 if yield_change < 0 else 0.65
+        income_change = yield_change * base_ratio
+        
+        # Price volatility dampens gains during surplus and cushions losses during shortages
+        price_volatility = 0.15  # 15% price swing assumption
+        if yield_change < 0:
+            income_change *= 1 + (price_volatility * 0.4)  # higher prices partially offset yield losses
+        else:
+            income_change *= 1 - (price_volatility * 0.6)  # glut drives prices down faster than yields grow
+        
+        # Diversification buffer reduces extreme swings (more diversification → smaller adjustment)
+        diversification_buffer = 1 - min(0.35, max(0.1, abs(yield_change) / 200))
+        income_change *= diversification_buffer
+        
+        return round(income_change, 2)
     
     def _estimate_adaptation_cost(self, risk: str, radius: float) -> float:
         """
-        TODO: Estimate cost of adaptation measures (in USD)
-        
-        Logic:
-        - High risk areas need more investment
-        - Larger areas cost more
-        - Typical costs:
-          - Irrigation: $500-1000/hectare
-          - Drought-resistant seeds: $50-100/hectare
-          - Water harvesting: $200-500/hectare
-        - Scale by radius (estimate hectares from radius)
-        
-        Args:
-            risk: Extreme weather risk level
-            radius: Area radius in km
-            
-        Returns:
-            float: Estimated cost in USD
+        Estimate total adaptation CAPEX needed for irrigation, inputs, and storage.
         """
-        # TODO: Implement this logic
-        # Hint: area_hectares = π * radius^2 * 100 (rough approximation)
-        # Multiply by cost per hectare based on risk
-        
         base_cost_per_hectare = {
-            "low": 100,
-            "medium": 300,
-            "high": 600
+            "low": 120,
+            "medium": 320,
+            "high": 650
         }
-        
-        # TODO: Calculate total cost
-        return 50000.0  # Placeholder
+        cost = base_cost_per_hectare.get(risk, 320)
+        area_hectares = math.pi * (radius ** 2) * 100  # circle area (km^2) → hectares
+        drought_buffer = 1.0 if risk == "low" else 1.15 if risk == "medium" else 1.35
+        contingency = 0.1  # inflation + logistics overhead
+        total_cost = area_hectares * cost * drought_buffer
+        total_cost *= 1 + contingency
+        return round(total_cost, -2)
     
     def _assess_economic_resilience(self, income_change: float, adaptation_cost: float) -> float:
         """
-        TODO: Assess economic resilience (0-1 scale)
-        
-        Logic:
-        - Low income impact + affordable adaptation = high resilience (0.7-1.0)
-        - Medium impact + moderate costs = medium resilience (0.4-0.7)
-        - High impact + high costs = low resilience (0.0-0.4)
-        
-        Args:
-            income_change: Percentage income change
-            adaptation_cost: USD cost of adaptations
-            
-        Returns:
-            float: Resilience score 0-1
+        Blend earning power and CAPEX burden into a 0-1 resilience score.
         """
-        # TODO: Implement this logic
-        return 0.5
+        income_component = max(0, 1 - (abs(income_change) / 30))
+        # Treat $250M as cost that zeroes resilience; smaller budgets scale linearly.
+        cost_component = max(0, 1 - (adaptation_cost / 250_000_000))
+        resilience = (income_component * 0.6) + (cost_component * 0.4)
+        return round(min(1.0, max(0.0, resilience)), 2)
+    
+    def _estimate_employment_impact(self, income_change: float, economic_priority: float) -> float:
+        """
+        Simple heuristic: labor follows revenue but high economic priority cushions cuts.
+        """
+        labor_elasticity = 0.5  # 1% income swing → 0.5% labor swing
+        impact = income_change * labor_elasticity
+        cushion = economic_priority / 200  # 0-0.5 dampener
+        impact *= max(0.5, 1 - cushion)
+        return round(impact, 2)
+    
+    def _build_recommendations(
+        self,
+        income_change: float,
+        adaptation_cost: float,
+        resilience_score: float,
+        employment_impact: float,
+        economic_priority: float
+    ) -> List[str]:
+        """Generate targeted actions for downstream agents."""
+        recs = []
+        if income_change < -5:
+            recs.append("Deploy emergency credit lines or crop insurance to stabilize farm cash flow.")
+        if adaptation_cost > 50_000_000:
+            recs.append("Phase irrigation and storage upgrades over multiple seasons to match fiscal capacity.")
+        if resilience_score < 0.4:
+            recs.append("Couple climate-resilient seed subsidies with guaranteed produce off-take to lift resilience.")
+        if employment_impact < -2:
+            recs.append("Expand public works or mechanization training to absorb seasonal labor slack.")
+        if not recs:
+            recs.append("Maintain current investment cadence; no major economic shocks forecast.")
+        if economic_priority > 70:
+            recs.insert(0, "Prioritize budget toward high-ROI interventions (precision irrigation, digital advisories).")
+        return recs
 
 
 # Singleton instance
