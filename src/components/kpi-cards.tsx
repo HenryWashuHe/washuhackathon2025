@@ -10,7 +10,9 @@ import {
   UsersIcon,
   AlertIcon,
 } from "@/components/icons"
-import { useEffect, useState } from "react"
+import type { Recommendation } from "@/types/api"
+
+type TrendDirection = "up" | "down" | "neutral"
 
 interface KpiCardsProps {
   location: { lat: number; lng: number; name: string }
@@ -20,128 +22,163 @@ interface KpiCardsProps {
     environmental: number
     social: number
   }
+  impact: Recommendation["impact"] | null
+  isAnalyzing: boolean
 }
 
-interface KpiData {
-  economic: { value: string; trend: "up" | "down" | "neutral"; change: string }
-  environmental: { value: string; trend: "up" | "down" | "neutral"; change: string }
-  social: { value: string; trend: "up" | "down" | "neutral"; change: string }
-  risk: { value: string; trend: "up" | "down" | "neutral"; change: string }
-}
-
-export function KpiCards({ location, radius, priorities }: KpiCardsProps) {
-  const [kpiData, setKpiData] = useState<KpiData | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-
-  useEffect(() => {
-    let isMounted = true
-    const frame = requestAnimationFrame(() => {
-      if (isMounted) {
-        setIsLoading(true)
-      }
-    })
-
-    const timer = window.setTimeout(() => {
-      if (!isMounted) {
-        return
-      }
-
-      setKpiData({
-        economic: { value: "$2.4M", trend: "up", change: "+12.5%" },
-        environmental: { value: "68/100", trend: "down", change: "-8.2%" },
-        social: { value: "7,200", trend: "up", change: "+5.3%" },
-        risk: { value: "Medium", trend: "neutral", change: "Stable" },
-      })
-      setIsLoading(false)
-    }, 1500)
-
-    return () => {
-      isMounted = false
-      cancelAnimationFrame(frame)
-      clearTimeout(timer)
-    }
-  }, [location, radius, priorities])
-
-  const getTrendIcon = (trend: "up" | "down" | "neutral") => {
-    switch (trend) {
-      case "up":
-        return <TrendingUpIcon className="h-4 w-4 text-chart-3" />
-      case "down":
-        return <TrendingDownIcon className="h-4 w-4 text-destructive" />
-      default:
-        return <MinusIcon className="h-4 w-4 text-muted-foreground" />
-    }
+const formatPercent = (value: number): string => {
+  const percent = value * 100
+  if (Math.abs(percent) < 0.05) {
+    return "0.0%"
   }
+  return `${percent > 0 ? "+" : ""}${percent.toFixed(1)}%`
+}
 
-  if (isLoading) {
+const getTrendDirection = (value: number): TrendDirection => {
+  if (value > 0.005) return "up"
+  if (value < -0.005) return "down"
+  return "neutral"
+}
+
+const describeDelta = (value: number, positive: string, negative: string): string => {
+  if (value > 0.005) return positive
+  if (value < -0.005) return negative
+  return "Stable"
+}
+
+const riskLabel = (risk: number): string => {
+  if (risk <= -0.25) return "Low"
+  if (risk <= -0.05) return "Moderate"
+  if (risk < 0.1) return "Stable"
+  if (risk < 0.25) return "Elevated"
+  return "High"
+}
+
+const getTrendIcon = (trend: TrendDirection, className: string) => {
+  switch (trend) {
+    case "up":
+      return <TrendingUpIcon className={`h-4 w-4 ${className}`} />
+    case "down":
+      return <TrendingDownIcon className={`h-4 w-4 ${className}`} />
+    default:
+      return <MinusIcon className={`h-4 w-4 ${className}`} />
+  }
+}
+
+const renderSkeleton = () => (
+  <div className="grid grid-cols-2 gap-3">
+    {[1, 2, 3, 4].map((i) => (
+      <Card key={i} className="p-4 bg-muted/30 animate-pulse">
+        <div className="h-4 bg-muted rounded w-20 mb-2" />
+        <div className="h-6 bg-muted rounded w-16 mb-1" />
+        <div className="h-3 bg-muted rounded w-12" />
+      </Card>
+    ))}
+  </div>
+)
+
+export function KpiCards({ location, radius, priorities, impact, isAnalyzing }: KpiCardsProps) {
+  const locationLabel = location?.name ?? "Selected area"
+  const prioritySummary = `Econ ${priorities.economic} · Env ${priorities.environmental} · Soc ${priorities.social}`
+
+  if (!impact) {
     return (
-      <div className="grid grid-cols-2 gap-3">
-        {[1, 2, 3, 4].map((i) => (
-          <Card key={i} className="p-4 bg-muted/30 animate-pulse">
-            <div className="h-4 bg-muted rounded w-20 mb-2" />
-            <div className="h-6 bg-muted rounded w-16 mb-1" />
-            <div className="h-3 bg-muted rounded w-12" />
+      <div className="space-y-2">
+        {!isAnalyzing && (
+          <Card className="p-4 bg-muted/30">
+            <p className="text-sm text-muted-foreground">
+              Choose a location and run the analysis to view key performance indicators.
+            </p>
           </Card>
-        ))}
+        )}
+        {renderSkeleton()}
       </div>
     )
   }
 
-  if (!kpiData) return null
+  const incomeTrend = getTrendDirection(impact.income)
+  const emissionsTrend = getTrendDirection(impact.emissions)
+  const foodTrend = getTrendDirection(impact.food)
+  const riskTrend = getTrendDirection(impact.risk)
+
+  const cards = [
+    {
+      key: "economic",
+      label: "Economic",
+      icon: DollarIcon,
+      iconClass: "text-chart-4",
+      cardClass: "bg-chart-4/10 border-chart-4/20",
+      value: formatPercent(impact.income),
+      trend: incomeTrend,
+      trendColor:
+        incomeTrend === "down" ? "text-destructive" : incomeTrend === "up" ? "text-chart-3" : "text-muted-foreground",
+      change: describeDelta(impact.income, "Improving farm incomes", "Declining farm incomes"),
+    },
+    {
+      key: "environmental",
+      label: "Environmental",
+      icon: LeafIcon,
+      iconClass: "text-chart-3",
+      cardClass: "bg-chart-3/10 border-chart-3/20",
+      value: formatPercent(impact.emissions),
+      trend: emissionsTrend,
+      trendColor:
+        emissionsTrend === "down"
+          ? "text-chart-3"
+          : emissionsTrend === "up"
+            ? "text-destructive"
+            : "text-muted-foreground",
+      change: describeDelta(impact.emissions, "Rising emissions", "Lower emissions footprint"),
+    },
+    {
+      key: "social",
+      label: "Social",
+      icon: UsersIcon,
+      iconClass: "text-chart-2",
+      cardClass: "bg-chart-2/10 border-chart-2/20",
+      value: formatPercent(impact.food),
+      trend: foodTrend,
+      trendColor:
+        foodTrend === "down" ? "text-destructive" : foodTrend === "up" ? "text-chart-3" : "text-muted-foreground",
+      change: describeDelta(impact.food, "Improved food security", "Lower food availability"),
+    },
+    {
+      key: "risk",
+      label: "Risk Level",
+      icon: AlertIcon,
+      iconClass: "text-destructive",
+      cardClass: "bg-destructive/10 border-destructive/20",
+      value: riskLabel(impact.risk),
+      trend: riskTrend,
+      trendColor:
+        riskTrend === "down" ? "text-chart-3" : riskTrend === "up" ? "text-destructive" : "text-muted-foreground",
+      change:
+        Math.abs(impact.risk) < 0.005
+          ? "Stable exposure"
+          : `${formatPercent(impact.risk)} vs baseline`,
+    },
+  ] as const
 
   return (
-    <div className="grid grid-cols-2 gap-3">
-      {/* Economic KPI */}
-      <Card className="p-4 bg-chart-4/10 border-chart-4/20">
-        <div className="flex items-center gap-2 mb-2">
-          <DollarIcon className="h-4 w-4 text-chart-4" />
-          <span className="text-xs font-medium text-muted-foreground">Economic</span>
-        </div>
-        <div className="text-xl font-bold text-foreground mb-1">{kpiData.economic.value}</div>
-        <div className="flex items-center gap-1 text-xs">
-          {getTrendIcon(kpiData.economic.trend)}
-          <span className="text-muted-foreground">{kpiData.economic.change}</span>
-        </div>
-      </Card>
-
-      {/* Environmental KPI */}
-      <Card className="p-4 bg-chart-3/10 border-chart-3/20">
-        <div className="flex items-center gap-2 mb-2">
-          <LeafIcon className="h-4 w-4 text-chart-3" />
-          <span className="text-xs font-medium text-muted-foreground">Environmental</span>
-        </div>
-        <div className="text-xl font-bold text-foreground mb-1">{kpiData.environmental.value}</div>
-        <div className="flex items-center gap-1 text-xs">
-          {getTrendIcon(kpiData.environmental.trend)}
-          <span className="text-muted-foreground">{kpiData.environmental.change}</span>
-        </div>
-      </Card>
-
-      {/* Social KPI */}
-      <Card className="p-4 bg-chart-2/10 border-chart-2/20">
-        <div className="flex items-center gap-2 mb-2">
-          <UsersIcon className="h-4 w-4 text-chart-2" />
-          <span className="text-xs font-medium text-muted-foreground">Social</span>
-        </div>
-        <div className="text-xl font-bold text-foreground mb-1">{kpiData.social.value}</div>
-        <div className="flex items-center gap-1 text-xs">
-          {getTrendIcon(kpiData.social.trend)}
-          <span className="text-muted-foreground">{kpiData.social.change}</span>
-        </div>
-      </Card>
-
-      {/* Risk KPI */}
-      <Card className="p-4 bg-destructive/10 border-destructive/20">
-        <div className="flex items-center gap-2 mb-2">
-          <AlertIcon className="h-4 w-4 text-destructive" />
-          <span className="text-xs font-medium text-muted-foreground">Risk Level</span>
-        </div>
-        <div className="text-xl font-bold text-foreground mb-1">{kpiData.risk.value}</div>
-        <div className="flex items-center gap-1 text-xs">
-          {getTrendIcon(kpiData.risk.trend)}
-          <span className="text-muted-foreground">{kpiData.risk.change}</span>
-        </div>
-      </Card>
+    <div className="space-y-2">
+      <div className="text-xs text-muted-foreground">
+        {locationLabel} · {radius} km radius · {prioritySummary}
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        {cards.map(({ key, label, icon: Icon, iconClass, cardClass, value, trend, trendColor, change }) => (
+          <Card key={key} className={`p-4 ${cardClass}`}>
+            <div className="flex items-center gap-2 mb-2">
+              <Icon className={`h-4 w-4 ${iconClass}`} />
+              <span className="text-xs font-medium text-muted-foreground">{label}</span>
+            </div>
+            <div className="text-xl font-bold text-foreground mb-1">{value}</div>
+            <div className="flex items-center gap-1 text-xs">
+              {getTrendIcon(trend, trendColor)}
+              <span className="text-muted-foreground">{change}</span>
+            </div>
+          </Card>
+        ))}
+      </div>
     </div>
   )
 }

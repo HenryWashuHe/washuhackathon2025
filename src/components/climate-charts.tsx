@@ -3,13 +3,32 @@
 import { Card } from "@/components/ui/card"
 import { useEffect, useRef } from "react"
 
-interface ClimateChartsProps {
-  location: { lat: number; lng: number; name: string }
+type DestroyableChart = { destroy: () => void }
+
+export interface RainfallSeries {
+  labels: string[]
+  baseline: number[]
+  projected: number[]
 }
 
-export function ClimateCharts({ location }: ClimateChartsProps) {
+export interface YieldSeries {
+  labels: string[]
+  baseline: number[]
+  projected: number[]
+}
+
+interface ClimateChartsProps {
+  data: {
+    rainfall: RainfallSeries
+    yields: YieldSeries
+  }
+}
+
+export function ClimateCharts({ data }: ClimateChartsProps) {
   const rainfallCanvasRef = useRef<HTMLCanvasElement>(null)
   const yieldCanvasRef = useRef<HTMLCanvasElement>(null)
+  const rainfallChartRef = useRef<DestroyableChart | null>(null)
+  const yieldChartRef = useRef<DestroyableChart | null>(null)
 
   useEffect(() => {
     // Dynamically load Chart.js
@@ -20,21 +39,22 @@ export function ClimateCharts({ location }: ClimateChartsProps) {
       if (rainfallCanvasRef.current) {
         const rainfallCtx = rainfallCanvasRef.current.getContext("2d")
         if (rainfallCtx) {
-          new Chart(rainfallCtx, {
+          rainfallChartRef.current?.destroy()
+          rainfallChartRef.current = new Chart(rainfallCtx, {
             type: "line",
             data: {
-              labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+              labels: data.rainfall.labels,
               datasets: [
                 {
                   label: "Historical Average",
-                  data: [45, 52, 61, 58, 72, 85, 92, 88, 76, 65, 54, 48],
+                  data: data.rainfall.baseline,
                   borderColor: "rgb(59, 130, 246)",
                   backgroundColor: "rgba(59, 130, 246, 0.1)",
                   tension: 0.4,
                 },
                 {
                   label: "Projected (2030)",
-                  data: [38, 45, 55, 52, 65, 78, 85, 82, 70, 58, 48, 42],
+                  data: data.rainfall.projected,
                   borderColor: "rgb(239, 68, 68)",
                   backgroundColor: "rgba(239, 68, 68, 0.1)",
                   borderDash: [5, 5],
@@ -70,7 +90,7 @@ export function ClimateCharts({ location }: ClimateChartsProps) {
                 },
               },
             },
-          })
+          }) as DestroyableChart
         }
       }
 
@@ -78,21 +98,22 @@ export function ClimateCharts({ location }: ClimateChartsProps) {
       if (yieldCanvasRef.current) {
         const yieldCtx = yieldCanvasRef.current.getContext("2d")
         if (yieldCtx) {
-          new Chart(yieldCtx, {
+          yieldChartRef.current?.destroy()
+          yieldChartRef.current = new Chart(yieldCtx, {
             type: "bar",
             data: {
-              labels: ["Wheat", "Corn", "Rice", "Soybeans", "Cotton"],
+              labels: data.yields.labels,
               datasets: [
                 {
                   label: "Current Yield (tons/ha)",
-                  data: [3.2, 5.8, 4.5, 2.9, 1.8],
+                  data: data.yields.baseline,
                   backgroundColor: "rgba(34, 197, 94, 0.7)",
                   borderColor: "rgb(34, 197, 94)",
                   borderWidth: 1,
                 },
                 {
                   label: "Projected Yield (2030)",
-                  data: [2.8, 5.2, 4.0, 2.6, 1.5],
+                  data: data.yields.projected,
                   backgroundColor: "rgba(251, 146, 60, 0.7)",
                   borderColor: "rgb(251, 146, 60)",
                   borderWidth: 1,
@@ -127,13 +148,18 @@ export function ClimateCharts({ location }: ClimateChartsProps) {
                 },
               },
             },
-          })
+          }) as DestroyableChart
         }
       }
     }
 
     loadChartJS()
-  }, [location])
+
+    return () => {
+      rainfallChartRef.current?.destroy()
+      yieldChartRef.current?.destroy()
+    }
+  }, [data])
 
   return (
     <div className="space-y-4">

@@ -14,6 +14,7 @@ import { AnalysisResults } from "@/components/analysis-results"
 import { geocodeLocation } from "@/lib/mapbox"
 import type { Recommendation } from "@/types/api"
 import { ExplainModal } from "@/components/explain-modal"
+import { PolicyRecommendation } from "@/components/policy-recommendation"
 
 export default function Home() {
   const [location, setLocation] = useState<{ lat: number; lng: number; name: string } | null>(null)
@@ -68,11 +69,13 @@ export default function Home() {
     setIsAnalyzing(true)
     setShowResults(true)
     setHasAnalyzed(true)
+    setRecommendation(null)
   }
 
   const handleRecalculate = () => {
     if (!location) return
     setIsAnalyzing(true)
+    setRecommendation(null)
   }
 
   const handleAnalysisComplete = (rec: Recommendation | null) => {
@@ -250,6 +253,10 @@ export default function Home() {
             isAnalyzing={isAnalyzing}
             onAnalysisComplete={handleAnalysisComplete}
           />
+        )}
+
+        {showResults && (
+          <PolicyRecommendation recommendation={recommendation} isAnalyzing={isAnalyzing} />
         )}
       </div>
 

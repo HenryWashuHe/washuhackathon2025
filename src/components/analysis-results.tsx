@@ -1,8 +1,8 @@
 "use client"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { DebateFeed } from "@/components/debate-feed"
 import { KpiCards } from "@/components/kpi-cards"
-import { ClimateCharts } from "@/components/climate-charts"
+import { ClimateCharts, RainfallSeries, YieldSeries } from "@/components/climate-charts"
 import type { Recommendation } from "@/types/api"
 
 interface AnalysisResultsProps {
@@ -18,6 +18,56 @@ interface AnalysisResultsProps {
   onAnalysisComplete: (recommendation: Recommendation | null) => void
 }
 
+const RAINFALL_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+const BASE_RAINFALL = [45, 52, 61, 58, 72, 85, 92, 88, 76, 65, 54, 48]
+
+const CROP_LABELS = ["Wheat", "Corn", "Rice", "Soybeans", "Cotton"]
+const BASE_YIELD = [3.2, 5.8, 4.5, 2.9, 1.8]
+
+const createInitialRainfall = (): RainfallSeries => ({
+  labels: [...RAINFALL_LABELS],
+  baseline: [...BASE_RAINFALL],
+  projected: [...BASE_RAINFALL],
+})
+
+const createInitialYields = (): YieldSeries => ({
+  labels: [...CROP_LABELS],
+  baseline: [...BASE_YIELD],
+  projected: [...BASE_YIELD],
+})
+
+const computeProjectedRainfall = (anomalyPercent: number | null): number[] => {
+  if (typeof anomalyPercent !== "number") {
+    return [...BASE_RAINFALL]
+  }
+  const factor = 1 + anomalyPercent / 100
+  return BASE_RAINFALL.map((value) => Number(Math.max(0, value * factor).toFixed(1)))
+}
+
+const computeProjectedYield = (yieldChangePercent: number | null): number[] => {
+  if (typeof yieldChangePercent !== "number") {
+    return [...BASE_YIELD]
+  }
+  const factor = 1 + yieldChangePercent / 100
+  return BASE_YIELD.map((value) => Number(Math.max(0, value * factor).toFixed(2)))
+}
+
+type StreamClaim = {
+  metric: string
+  value: number
+  unit?: string
+  confidence?: number
+}
+
+type StreamPayload = {
+  role?: string
+  content?: string
+  strategy?: Recommendation["strategy"]
+  impact?: Recommendation["impact"]
+  claims?: StreamClaim[]
+  [key: string]: unknown
+}
+
 export function AnalysisResults({
   location,
   radius,
@@ -27,11 +77,28 @@ export function AnalysisResults({
   onAnalysisComplete,
 }: AnalysisResultsProps) {
   const [debateMessages, setDebateMessages] = useState<Array<{ role: string; content: string }>>([])
+  const [latestImpact, setLatestImpact] = useState<Recommendation["impact"] | null>(null)
+  const previousImpactRef = useRef<Recommendation["impact"] | null>(null)
+  const [chartData, setChartData] = useState<{
+    rainfall: RainfallSeries
+    yields: YieldSeries
+  }>({
+    rainfall: createInitialRainfall(),
+    yields: createInitialYields(),
+  })
 
   const startAnalysis = useCallback(async () => {
     if (!location) return
 
+    const priorImpact = previousImpactRef.current
     try {
+      setDebateMessages([])
+      setLatestImpact(null)
+      setChartData({
+        rainfall: createInitialRainfall(),
+        yields: createInitialYields(),
+      })
+
       const response = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -39,7 +106,7 @@ export function AnalysisResults({
           location,
           radius,
           priorities,
-          userPrompt: userPrompt || undefined, // Only include if provided
+          userPrompt: userPrompt || undefined,
         }),
       })
 
@@ -51,6 +118,9 @@ export function AnalysisResults({
       if (!reader) return
 
       let buffer = ""
+      const allMessages: StreamPayload[] = []
+      let finalStrategy: Recommendation["strategy"] | null = null
+      let finalImpact: Recommendation["impact"] | null = null
 
       while (true) {
         const { done, value } = await reader.read()
@@ -63,9 +133,39 @@ export function AnalysisResults({
         for (const line of lines) {
           if (line.startsWith("data: ")) {
             try {
-              const data = JSON.parse(line.slice(6))
-              if (data.role && data.content) {
-                setDebateMessages((prev) => [...prev, data])
+              const payload = JSON.parse(line.slice(6)) as StreamPayload
+              allMessages.push(payload)
+
+              if (typeof payload.role === "string" && typeof payload.content === "string") {
+                setDebateMessages((prev) => [
+                  ...prev,
+                  { role: payload.role, content: payload.content },
+                ])
+              }
+
+              if (payload.role === "meteorologist" && Array.isArray(payload.claims)) {
+                const anomalyClaim = payload.claims.find((claim) => claim.metric === "precipitation_anomaly")
+                const projected = computeProjectedRainfall(
+                  typeof anomalyClaim?.value === "number" ? anomalyClaim.value : null
+                )
+                setChartData((prev) => ({
+                  rainfall: { ...prev.rainfall, projected },
+                  yields: prev.yields,
+                }))
+              }
+
+              if (payload.role === "agronomist" && Array.isArray(payload.claims)) {
+                const yieldClaim = payload.claims.find((claim) => claim.metric === "crop_yield_change")
+                const projected = computeProjectedYield(typeof yieldClaim?.value === "number" ? yieldClaim.value : null)
+                setChartData((prev) => ({
+                  rainfall: prev.rainfall,
+                  yields: { ...prev.yields, projected },
+                }))
+              }
+
+              if (payload.role === "system" && payload.strategy && payload.impact) {
+                finalStrategy = payload.strategy
+                finalImpact = payload.impact
               }
             } catch (e) {
               console.error("[v0] Failed to parse SSE data:", e)
@@ -74,32 +174,37 @@ export function AnalysisResults({
         }
       }
 
-      const mockRecommendation: Recommendation = {
-        strategy: { maize: 0.7, sorghum: 0.3, irrigation_subsidy: true },
-        impact: {
-          food: 0.04,
-          income: 0.05,
-          emissions: -0.01,
-          risk: -0.12,
-        },
-        sources: [
-          { provider: "open-meteo", retrieved_at: new Date().toISOString() },
-          { provider: "faostat", retrieved_at: new Date().toISOString() },
-        ],
-        explanation:
-          "Switching 30% to sorghum reduces drought loss; irrigation offsets income dip. This strategy balances your priorities while maintaining food security.",
+      // Build recommendation from collected data
+      let finalRecommendation: Recommendation | null = null
+      
+      if (finalStrategy && finalImpact) {
+        const plannerEntry = allMessages.find((msg) => msg.role === "planner")
+        const plannerContent = typeof plannerEntry?.content === "string" ? plannerEntry.content : null
+
+        finalRecommendation = {
+          strategy: finalStrategy,
+          impact: finalImpact,
+          sources: [
+            { provider: "open-meteo", retrieved_at: new Date().toISOString() },
+            { provider: "langgraph-agents", retrieved_at: new Date().toISOString() },
+          ],
+          explanation: plannerContent || "Multi-agent analysis complete.",
+        }
+        setLatestImpact(finalImpact)
+        previousImpactRef.current = finalImpact
       }
 
-      onAnalysisComplete(mockRecommendation)
+      onAnalysisComplete(finalRecommendation)
     } catch (error) {
       console.error("[v0] Analysis error:", error)
+      setLatestImpact(priorImpact ?? null)
+      previousImpactRef.current = priorImpact ?? null
       onAnalysisComplete(null)
     }
   }, [location, radius, priorities, userPrompt, onAnalysisComplete])
 
   useEffect(() => {
     if (isAnalyzing) {
-      setDebateMessages([])
       startAnalysis()
     }
   }, [isAnalyzing, startAnalysis])
@@ -107,10 +212,16 @@ export function AnalysisResults({
   return (
     <div className="space-y-6">
       {/* KPI Cards */}
-      <KpiCards location={location} radius={radius} priorities={priorities} />
+      <KpiCards
+        location={location}
+        radius={radius}
+        priorities={priorities}
+        impact={latestImpact}
+        isAnalyzing={isAnalyzing}
+      />
 
       {/* Climate Charts */}
-      <ClimateCharts location={location} />
+      <ClimateCharts data={chartData} />
 
       {/* Debate Feed */}
       <DebateFeed messages={debateMessages} isAnalyzing={isAnalyzing} />
