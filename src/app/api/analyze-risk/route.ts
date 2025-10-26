@@ -4,12 +4,14 @@
  * No more hardcoded data!
  */
 
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
+
 export async function POST(req: Request) {
   try {
     const body = await req.json()
     
     // Call the Python backend for real AI analysis
-    const backendResponse = await fetch("http://localhost:8000/analyze-risk", {
+    const backendResponse = await fetch(`${BACKEND_URL}/analyze-risk`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
