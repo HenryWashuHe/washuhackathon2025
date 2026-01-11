@@ -67,12 +67,25 @@ class EconomistAgent(BaseAgent):
         
         priority_weight = state.priorities.economic / 100
         emphasis = "aggressive" if priority_weight > 0.66 else "balanced" if priority_weight > 0.33 else "cautious"
-        message = (
-            f"Farm income around {state.location.name} is set to {income_change:+.1f}% with ripple effects of "
-            f"{employment_impact:+.1f}% on seasonal labor. "
-            f"Keeping drought defenses funded will require roughly ${adaptation_cost:,.0f}, yet "
-            f"the overall resilience score sits at {resilience_score:.2f}, meaning an {emphasis} investment posture is advisable."
-        )
+        
+        # Create debate-style message that references previous agents
+        if income_change < -5:
+            message = (
+                f"Hold on - the agronomist's yield projections translate to a {income_change:+.1f}% income hit for farmers here. "
+                f"That's ${adaptation_cost:,.0f} in adaptation costs we need to address. The meteorologist's extreme weather data "
+                f"makes this urgent - we can't wait on this investment."
+            )
+        elif income_change > 5:
+            message = (
+                f"I'm more optimistic than the agronomist - yes, there are challenges, but I'm seeing {income_change:+.1f}% income potential "
+                f"if we invest the ${adaptation_cost:,.0f} in smart adaptations. The climate data actually creates opportunities here."
+            )
+        else:
+            message = (
+                f"The agronomist's concerns are valid, but economically we're looking at {income_change:+.1f}% income change - manageable. "
+                f"${adaptation_cost:,.0f} in adaptation costs with a resilience score of {resilience_score:.2f}. "
+                f"I'd recommend a {emphasis} investment approach given what the meteorologist showed us."
+            )
         
         agent_message = self.create_message(message, claims, recommendations)
         return {

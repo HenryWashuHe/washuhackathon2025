@@ -88,8 +88,20 @@ export function AnalysisResults({
     yields: createInitialYields(),
   })
 
+  // Add abort controller ref to prevent duplicate requests
+  const abortControllerRef = useRef<AbortController | null>(null)
+
   const startAnalysis = useCallback(async () => {
     if (!location) return
+
+    // Abort any existing request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+
+    // Create new abort controller
+    const controller = new AbortController()
+    abortControllerRef.current = controller
 
     const priorImpact = previousImpactRef.current
     const priorContext = previousContextRef.current
@@ -102,6 +114,7 @@ export function AnalysisResults({
       })
 
       const response = await fetch("/api/analyze", {
+        signal: controller.signal,
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -111,11 +124,19 @@ export function AnalysisResults({
           userPrompt: userPrompt || undefined,
         }),
       }).catch((error) => {
+        // Ignore abort errors
+        if (error.name === 'AbortError') {
+          console.log("[Analysis] Request aborted (duplicate prevention)")
+          return null
+        }
         console.error("[Analysis] Network error:", error)
         throw new Error("Failed to connect to the analysis service. Please check your connection and try again.")
       })
 
-      if (!response.ok) throw new Error("Analysis failed")
+      if (!response || response.ok === false) {
+        if (response === null) return // Request was aborted
+        throw new Error("Analysis failed")
+      }
 
       const reader = response.body?.getReader()
       const decoder = new TextDecoder()
@@ -253,6 +274,13 @@ export function AnalysisResults({
   useEffect(() => {
     if (isAnalyzing) {
       startAnalysis()
+    }
+    
+    // Cleanup function to abort request on unmount or when isAnalyzing changes
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
     }
   }, [isAnalyzing, startAnalysis])
 

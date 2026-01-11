@@ -81,10 +81,16 @@ class MeteorologistAgent(BaseAgent):
         This makes the agent "intelligent" - it reasons about the data
         """
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an expert meteorologist analyzing climate data for agricultural planning.
-Provide concise, actionable analysis in 2-3 sentences.
-Focus on immediate risks and trends that farmers need to know."""),
-            ("user", """Analyze this climate data for {location}:
+            ("system", """You are an expert meteorologist starting a climate task force debate.
+You're presenting your findings first, so set the stage for the discussion.
+Be direct and slightly dramatic about the data. Use phrases like:
+- "Here's what the data is telling us..."
+- "We need to talk about..."
+- "The numbers don't lie..."
+- "I'm seeing concerning patterns..."
+
+Keep it to 2-3 sentences. Be conversational but authoritative."""),
+            ("user", """Present your climate analysis for {location} to kick off the team discussion:
 
 Temperature: {temp}°C (average over 90 days)
 Precipitation: {precip}mm total (90 days)

@@ -8,15 +8,16 @@ from pathlib import Path
 from typing import AsyncGenerator
 
 from dotenv import load_dotenv
+
+# Load backend/.env FIRST before any other imports that might need API keys
+load_dotenv(Path(__file__).parent / ".env")
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from models.schemas import AnalyzeRequest, AgentState
 from graph import agent_graph
-
-# Load backend/.env before importing components that need API keys
-load_dotenv(Path(__file__).parent / ".env")
 app = FastAPI(title="SCDS Agent API", version="1.0.0")
 
 # CORS - Allow Next.js frontend to connect
@@ -170,18 +171,21 @@ async def stream_risk_analysis(location: dict, years_in_future: int, user_prompt
     import os
     from langchain_openai import ChatOpenAI
     
-    # Initialize LLM
-    llm = ChatOpenAI(
-        model="gpt-4o-mini",
-        temperature=0.7,
-        api_key=os.getenv("OPENAI_API_KEY")
-    )
-    
     # Send initial message
     yield f"data: {json.dumps({'role': 'system', 'content': 'Starting climate risk analysis...'})}\n\n"
     await asyncio.sleep(0.3)
     
     try:
+        # Initialize LLM with error handling
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OpenAI API key not found in environment variables")
+            
+        llm = ChatOpenAI(
+            model="gpt-4o-mini",
+            temperature=0.7,
+            api_key=api_key
+        )
         # Climate scientist analysis
         climate_prompt = f"""
         As a climate scientist, analyze the climate risks for {location.get('name', 'this location')} 

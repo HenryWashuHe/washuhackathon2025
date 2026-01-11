@@ -231,12 +231,25 @@ export function ClimateRiskResults({
   const [hazards, setHazards] = useState<string[]>([])
   const [economicImpact, setEconomicImpact] = useState<EconomicImpact | null>(null)
   const [messages, setMessages] = useState<Array<{ role: string; content: string }>>([])
+  
+  // Add abort controller ref to prevent duplicate requests
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   const startAnalysis = useCallback(async () => {
     if (!location) return
 
+    // Abort any existing request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+
+    // Create new abort controller
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+
     try {
       const response = await fetch("/api/analyze-risk", {
+        signal: controller.signal,
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -246,11 +259,19 @@ export function ClimateRiskResults({
           userPrompt: userPrompt || undefined,
         }),
       }).catch((error) => {
+        // Ignore abort errors
+        if (error.name === 'AbortError') {
+          console.log("[ClimateRisk] Request aborted (duplicate prevention)")
+          return null
+        }
         console.error("[ClimateRisk] Network error:", error)
         throw new Error("Failed to connect to the risk analysis service. Please check your connection and try again.")
       })
 
-      if (!response.ok) throw new Error("Risk analysis failed")
+      if (!response || response.ok === false) {
+        if (response === null) return // Request was aborted
+        throw new Error("Risk analysis failed")
+      }
 
       const reader = response.body?.getReader()
       const decoder = new TextDecoder()
@@ -341,6 +362,13 @@ export function ClimateRiskResults({
     if (isAnalyzing) {
       setMessages([])
       startAnalysis()
+    }
+    
+    // Cleanup function to abort request on unmount or when isAnalyzing changes
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
     }
   }, [isAnalyzing, startAnalysis])
 

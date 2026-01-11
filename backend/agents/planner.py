@@ -338,19 +338,37 @@ class PlannerAgent(BaseAgent):
         else:
             yield_phrase = "maintain stable yields"
         
-        first = (
-            f"In {location_name}, we prioritise {lead_crop} with support from climate-resilient crops to {yield_phrase} "
-            f"under {risk_text} risk."
+        # Create debate-style synthesis that references all agents
+        if yield_delta < -10:
+            opening = (
+                f"Alright team, I've heard everyone's concerns. The meteorologist's right about the {risk_text} risk, "
+                f"and the agronomist's yield projections are sobering. But here's the plan: "
+            )
+        elif income_pct < 0:
+            opening = (
+                f"I appreciate the economist's financial analysis - yes, there are costs. But let me synthesize what we've learned: "
+            )
+        else:
+            opening = (
+                f"Looking at everything the team presented, I see a clear path forward for {location_name}: "
+            )
+        
+        strategy_detail = (
+            f"We shift to {lead_crop}-focused cropping to {yield_phrase} under {risk_text} conditions. "
+            f"This addresses the meteorologist's climate concerns and the agronomist's crop viability issues."
         )
-        second = (
-            f"The proposed plan improves food security by about {food_pct:.0f}% and steadies farm income by {income_pct:.0f}% "
-            f"while cutting climate risk roughly {risk_pct:.0f}%."
+        
+        impact_summary = (
+            f"Expected outcomes: {food_pct:.0f}% food security improvement, {income_pct:.0f}% income stabilization, "
+            f"and {risk_pct:.0f}% risk reduction. The economist's adaptation costs are justified by these gains."
         )
-        third = (
-            f"Given priority weights (Economic {priorities.economic} / Environmental {priorities.environmental} / "
-            f"Social {priorities.social}), implement the measures on a {timeline} timeline with coordinated financing."
+        
+        closing = (
+            f"Given your priorities (Economic {priorities.economic}/Environmental {priorities.environmental}/Social {priorities.social}), "
+            f"we implement on a {timeline} timeline. That's my synthesis - thoughts?"
         )
-        return " ".join([first, second, third])
+        
+        return " ".join([opening, strategy_detail, impact_summary, closing])
     
     def _claim_value(self, agent_output: AgentMessage, metric: str, default: Any = None) -> Any:
         """Return a specific claim value if present."""

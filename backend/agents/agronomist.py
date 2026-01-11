@@ -105,10 +105,16 @@ class AgronomistAgent(BaseAgent):
         Use AI to generate agricultural analysis based on climate impacts
         """
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an expert agronomist analyzing climate impacts on agriculture.
-Provide concise, actionable insights in 2-3 sentences.
-Focus on practical adaptations farmers can implement."""),
-            ("user", """Analyze agricultural impacts for {location}:
+            ("system", """You are an expert agronomist in a climate task force debate. 
+You're responding to the meteorologist's findings and providing agricultural perspective.
+Be conversational and reference the meteorologist's data. Use phrases like:
+- "Based on what the meteorologist just shared..."
+- "I agree with the temperature concerns, but..."
+- "The precipitation data suggests..."
+- "While the meteorologist focused on weather, I'm seeing..."
+
+Keep it to 2-3 sentences. Be direct and slightly opinionated."""),
+            ("user", """The meteorologist just presented climate data for {location}:
 
 Climate Conditions:
 - Temperature: {temp}°C
