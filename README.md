@@ -1,263 +1,182 @@
-# SCDS - Smart Climate Decision System
+# SCDS: Smart Climate Decision System
 
-An AI-powered multi-agent platform that analyzes climate data and provides actionable climate adaptation strategies using real-time weather data and AI agents.
+**Winner, WashU Skandalaris AI Hackathon 2025** (Hack WashU × Skandalaris Center × Mayfield)
 
-## ✨ Features
+Pick any place on a map and SCDS tells you how the climate there is changing, what it means for local farming and the economy, and which adaptation strategy fits your priorities. A team of AI agents works through it step by step, and you watch their reasoning arrive in the browser as it streams in.
 
-- 🗺️ **Interactive Map**: Select any location worldwide with Mapbox integration
-- 🌦️ **Real Climate Data**: Fetches actual weather patterns from Open-Meteo API
-- 🤖 **AI Agent Debate**: Four specialized agents (Meteorologist, Agronomist, Economist, Planner) analyze and discuss climate impacts
-- 📊 **Data Visualization**: Charts showing rainfall trends and crop yield projections
-- 🎯 **Priority-Based Analysis**: Adjust economic, environmental, and social priorities
-- ⚡ **Real-Time Streaming**: Live debate updates via Server-Sent Events
-- 🏗️ **Full Stack Architecture**: Next.js frontend with FastAPI/LangGraph backend
+SCDS has two modes:
 
-## Quick Start
+- **Agricultural adaptation.** Four agents (Meteorologist → Agronomist → Economist → Planner) turn the last 90 days of real weather data into a crop mix and water strategy, scored against your economic, environmental and social priorities.
+- **Long-term climate risk.** Analyst agents estimate climate hazards, economic impact and an overall risk score for a location over the next N years.
+
+## How it works
+
+```mermaid
+flowchart LR
+    UI["Next.js app<br/>map, sliders, prompt"] -->|POST /analyze| API["FastAPI"]
+    API --> M
+    subgraph G["LangGraph pipeline (shared typed state)"]
+        M["Meteorologist<br/>Open-Meteo archive, 90 days"] --> A["Agronomist<br/>yield, water stress, soil health"]
+        A --> E["Economist<br/>income, adaptation cost, resilience"]
+        E --> P["Planner<br/>crop mix, irrigation, 0–100 score"]
+    end
+    P -->|"Server-Sent Events, one per agent"| UI
+```
+
+**Numbers come from models; language comes from the LLM.** Every quantitative output is computed by deterministic, testable code, and GPT-4o-mini is used only to explain it. That keeps the results reproducible and stops the LLM from inventing figures.
+
+- **Meteorologist** pulls 90 days of daily temperature and precipitation from the [Open-Meteo archive API](https://open-meteo.com/), computes the precipitation anomaly against a seasonal baseline, and classifies drought, heat and flood risk.
+- **Agronomist** estimates crop yield change, a water-stress index and a soil-health index from those signals, then writes an LLM summary for farmers.
+- **Economist** converts the agronomic signals into income change, adaptation cost, economic resilience and employment impact.
+- **Planner** builds a strategy (crop mix across maize, sorghum and legumes, plus irrigation, water harvesting and soil improvements), simulates its impact on food, income, emissions and risk, and scores it 0–100 using your normalized priority weights.
+
+Agents pass information to each other as **structured claims** (`metric`, `value`, `unit`, `confidence`) in a shared Pydantic state, not free text. Each agent reads exactly the numbers it needs from the agents before it, and the UI can show where every number came from in the "Explain" view.
+
+## Features
+
+- Interactive Google Map: search a place, enter coordinates, or click anywhere; set an area radius of 10–200 km
+- Priority sliders for economic, environmental and social goals that change the recommended strategy
+- Optional free-text context (for example, "focus on smallholder farmers")
+- Agent debate feed streamed over Server-Sent Events
+- KPI cards and charts for rainfall and yield projections
+- "Explain" view with data sources and reasoning for each claim
+- Long-term risk mode with an adjustable time horizon
+
+## Tech stack
+
+| Layer | Tools |
+|---|---|
+| Frontend | Next.js 15 (App Router), React 19, TypeScript, Tailwind CSS, shadcn/ui, Framer Motion |
+| Maps and charts | Google Maps JavaScript API and Geocoding, Chart.js |
+| Backend | FastAPI, Pydantic v2, Server-Sent Events |
+| Agents | LangGraph, LangChain, OpenAI GPT-4o-mini |
+| Data | Open-Meteo historical weather archive |
+| Deployment | Vercel (frontend), Render (backend) |
+| Testing | pytest, pytest-asyncio |
+
+## Getting started
 
 ### Prerequisites
 
-- Node.js 18+ and npm
-- Python 3.11+ and pip
-- Mapbox API token ([Get one here](https://account.mapbox.com/access-tokens/))
-- OpenAI API key ([Get one here](https://platform.openai.com/api-keys))
+- Node.js 18+ and Python 3.11+
+- An OpenAI API key
+- A Google Maps API key with the Maps JavaScript API and Geocoding API enabled
 
-### Installation
+### 1. Backend
 
-1. **Clone and install frontend dependencies:**
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate        # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+Create `backend/.env`:
+
+```env
+OPENAI_API_KEY=your_openai_api_key
+# Optional: override the agronomist's model
+# AGRONOMIST_MODEL=gpt-4o-mini
+```
+
+Run it:
+
+```bash
+python main.py                  # or: uvicorn main:app --reload --port 8000
+```
+
+### 2. Frontend
 
 ```bash
 npm install --legacy-peer-deps
 ```
 
-2. **Set up frontend environment variables:**
+Create `.env.local` in the project root:
 
-```bash
-cp env.example .env.local
-```
-
-Edit `.env.local` and add your API keys:
 ```env
-NEXT_PUBLIC_MAPBOX_TOKEN=your_mapbox_token_here
-OPENAI_API_KEY=your_openai_api_key_here
-BACKEND_URL=http://localhost:8000  # For local development
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=your_google_maps_key
+BACKEND_URL=http://localhost:8000
 ```
 
-3. **Set up the backend:**
+Run it:
 
 ```bash
-cd backend
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-cp env.example .env
-```
-
-Edit `backend/.env` and add:
-```env
-OPENAI_API_KEY=your_openai_api_key_here
-```
-
-4. **Start the development servers:**
-
-```bash
-# Terminal 1: Start backend
-cd backend
-source venv/bin/activate
-python main.py
-
-# Terminal 2: Start frontend
 npm run dev
 ```
 
-5. **Open your browser:**
+Then open [http://localhost:3000](http://localhost:3000).
 
-Visit [http://localhost:3000](http://localhost:3000)
+## API
 
-## Usage
+### `POST /analyze` (agricultural adaptation)
 
-1. **Select a Location:**
-   - Search for a place (e.g., "Kenya", "California")
-   - Or enter coordinates manually
-   - Or click directly on the map
-
-2. **Adjust Parameters:**
-   - Set the area of interest radius (10-200 km)
-   - Configure priority sliders (Economic, Environmental, Social)
-   - Optionally add context in the text area
-
-3. **Run Analysis:**
-   - Click "Analyze Climate Impact"
-   - Watch the AI agents debate in real-time
-   - Review KPIs, charts, and recommendations
-
-4. **Explore Results:**
-   - Click "Explain" to see data sources and reasoning
-   - Click "Recalculate" to re-run with different priorities
-
-## Project Structure
-
-```
-├── src/                          # Next.js Frontend
-│   ├── app/
-│   │   ├── api/analyze/route.ts  # API proxy to backend
-│   │   ├── page.tsx              # Home page
-│   │   └── layout.tsx            # App layout
-│   ├── components/
-│   │   ├── climate-map.tsx       # Interactive map component
-│   │   ├── debate-feed.tsx       # AI agent debate stream
-│   │   ├── kpi-cards.tsx         # Key performance indicators
-│   │   └── climate-charts.tsx    # Data visualizations
-│   ├── lib/
-│   │   ├── open-meteo.ts         # Climate data API integration
-│   │   └── mapbox.ts             # Geocoding functions
-│   └── types/
-│       └── api.ts                # TypeScript interfaces
-│
-└── backend/                      # FastAPI + LangGraph Backend
-    ├── main.py                   # FastAPI server & streaming
-    ├── graph.py                  # LangGraph orchestrator
-    ├── requirements.txt          # Python dependencies
-    ├── agents/
-    │   ├── base.py              # Base agent class
-    │   ├── meteorologist.py     # Climate analysis agent
-    │   ├── agronomist.py        # Agricultural impact agent
-    │   ├── economist.py         # Economic analysis agent
-    │   └── planner.py           # Strategy synthesis agent
-    └── models/
-        └── schemas.py           # Pydantic data models
-```
-
-## Tech Stack
-
-### Frontend
-- **Framework:** Next.js 15, React 19, TypeScript
-- **Styling:** TailwindCSS, shadcn/ui components
-- **Maps:** Mapbox GL JS
-- **Charts:** Chart.js + react-chartjs-2
-- **Animations:** Framer Motion
-- **AI Integration:** Vercel AI SDK
-
-### Backend
-- **Framework:** FastAPI (Python 3.11+)
-- **AI Agents:** LangGraph + LangChain
-- **AI Model:** OpenAI GPT-4o-mini
-- **Data Validation:** Pydantic
-- **Streaming:** Server-Sent Events (SSE)
-
-### External APIs
-- **Climate Data:** Open-Meteo API
-- **Geocoding:** Mapbox Geocoding API
-- **Future:** FAOSTAT API (crop data)
-
-## API Reference
-
-### Frontend: POST `/api/analyze`
-
-Proxy endpoint that forwards requests to the FastAPI backend.
-
-### Backend: POST `/analyze`
-
-Analyzes climate impact for a given location using multi-agent system.
-
-**Request Body:**
 ```json
 {
-  "location": { 
-    "lat": -1.286, 
-    "lng": 36.817, 
-    "name": "Nairobi" 
-  },
+  "location": { "lat": -1.286, "lng": 36.817, "name": "Nairobi" },
   "radius": 100,
-  "priorities": { 
-    "economic": 50, 
-    "environmental": 50, 
-    "social": 50 
-  },
+  "priorities": { "economic": 50, "environmental": 50, "social": 50 },
   "userPrompt": "Focus on smallholder farmers"
 }
 ```
 
-**Response:** Server-Sent Events stream with agent messages
+The response is a Server-Sent Events stream with one message per agent, followed by the final strategy:
+
 ```
-data: {"role": "meteorologist", "content": "...", "claims": [...]}
-data: {"role": "agronomist", "content": "...", "claims": [...]}
-data: {"role": "economist", "content": "...", "claims": [...]}
-data: {"role": "planner", "content": "...", "strategy": {...}}
+data: {"role": "meteorologist", "content": "...", "claims": [...], "recommendations": [...]}
+data: {"role": "agronomist", ...}
+data: {"role": "economist", ...}
+data: {"role": "planner", ...}
+data: {"role": "system", "content": "Analysis complete", "strategy": {...}, "impact": {...}}
 ```
 
-## Development
+### `POST /analyze-risk` (long-term risk)
 
-### Frontend Development
+Takes a location, a time horizon in years and an optional prompt, and streams risk-analyst and economist assessments plus a risk score and impact estimate.
+
+### `GET /`
+
+Health check.
+
+## Project structure
+
+```
+├── src/                              Next.js frontend
+│   ├── app/
+│   │   ├── page.tsx                  Agricultural adaptation mode
+│   │   ├── climate-risk/page.tsx     Long-term risk mode
+│   │   ├── landing/page.tsx          Landing page
+│   │   └── api/                      Proxies to the FastAPI backend
+│   │       ├── analyze/route.ts
+│   │       ├── analyze-risk/route.ts
+│   │       └── health/route.ts
+│   ├── components/                   Map, debate feed, KPI cards, charts, sliders, explain modal
+│   ├── lib/                          Google Maps geocoding, Open-Meteo client, API client
+│   └── types/api.ts                  Shared request and response types
+│
+└── backend/                          FastAPI + LangGraph
+    ├── main.py                       API server and SSE streaming
+    ├── graph.py                      LangGraph pipeline
+    ├── agents/                       meteorologist, agronomist, economist, planner
+    ├── models/schemas.py             Pydantic state, claims and request models
+    ├── tests/                        Agent and full-pipeline tests
+    └── render.yaml                   Render deployment config
+```
+
+## Testing
+
 ```bash
-npm run dev          # Start development server
-npm run build        # Build for production
-npm run start        # Start production server
-npm run lint         # Run ESLint
+cd backend && pytest            # agent unit tests and full-pipeline test
+npm run lint                    # frontend lint and type checks
+./test-local.sh                 # end-to-end check against local servers
+./test-deployment.sh            # end-to-end check against the deployed app
 ```
 
-### Backend Development
-```bash
-cd backend
-source venv/bin/activate
-python main.py       # Start FastAPI server
-pytest               # Run tests
-```
+## Limitations and next steps
 
-### Testing
-```bash
-# Frontend tests
-npm run lint
-
-# Backend tests
-cd backend && pytest
-
-# Integration tests
-./test-local.sh      # Test full stack locally
-./test-deployment.sh # Test production deployment
-```
-
-## Current Status
-
-✅ **Completed Features**
-- [x] Frontend UI with interactive map and controls
-- [x] FastAPI backend with LangGraph multi-agent system
-- [x] Real-time AI agent streaming via SSE
-- [x] Open-Meteo climate data integration
-- [x] Four specialized AI agents (Meteorologist, Agronomist, Economist, Planner)
-- [x] Production deployment on Vercel (frontend) + Render (backend)
-
-🚧 **In Progress**
-- [ ] FAOSTAT crop yield data integration
-- [ ] OR-Tools optimization engine
-- [ ] Enhanced error handling and validation
-
-📋 **Planned Features**
-- [ ] Multi-region comparison
-- [ ] Historical data caching
-- [ ] Additional specialized agents (Energy, Water)
-- [ ] Mobile app development
-
-## Documentation
-
-- [PROGRESS.md](./PROGRESS.md) - Detailed development status
-- [PRD.md](./PRD.md) - Full product requirements
-- [backend/README.md](./backend/README.md) - Backend API documentation
-- [DEPLOYMENT.md](./DEPLOYMENT.md) - Deployment guide
-
-## Contributing
-
-This is a hackathon project built for WashU Hackathon 2025. Contributions welcome!
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
+- The precipitation baseline is a fixed seasonal estimate. Using a per-location 30-year climatology would make the anomaly more accurate.
+- The pipeline currently runs to completion and then streams each agent's message. Streaming tokens as each agent works is next.
+- Planned: FAOSTAT crop-yield and price data, OR-Tools multi-objective crop-mix optimization, multi-region comparison, and response caching.
 
 ## License
 
 MIT
-
----
-
-Built for WashU Hackathon 2025 🚀
