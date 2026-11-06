@@ -177,6 +177,10 @@ npm run lint                    # frontend lint and type checks
 - The pipeline currently runs to completion and then streams each agent's message. Streaming tokens as each agent works is next.
 - Planned: FAOSTAT crop-yield and price data, OR-Tools multi-objective crop-mix optimization, multi-region comparison, and response caching.
 
+## Team
+
+Built at the WashU Skandalaris AI Hackathon 2025. Henry He was technical lead and designed the multi-agent architecture, the FastAPI and LangGraph backend, and the streaming integration with the frontend. Teammates shaped the product direction and user experience and delivered the final pitch.
+
 ## License
 
 MIT
